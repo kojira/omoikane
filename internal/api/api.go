@@ -52,12 +52,18 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Get("/auth/google/callback", h.authGoogleCallback)
 		r.Post("/auth/logout", h.authLogout)
 
+		// Agent self-onboarding (public; rate-limited at the middleware
+		// layer by KB_REQUEST_BODY_MAX + access-log review)
+		r.Post("/agents/register", h.agentRegister)
+		r.Get("/agents/claim/{code}", h.agentClaimGet)
+
 		r.Group(func(r chi.Router) {
 			// Promote browser session cookies to Bearer tokens so the
 			// existing token-based auth middleware sees them.
 			r.Use(auth.SessionCookieToBearer(sessionCookieName))
 			r.Use(authMW.Authenticate)
 			r.Get("/auth/me", h.authMe)
+			r.Post("/agents/claim/{code}", h.agentClaimPost)
 
 			r.With(auth.RequireScope("read")).Get("/projects", h.listProjects)
 			r.With(auth.RequireScope("read")).Get("/projects/{id}", h.getProject)

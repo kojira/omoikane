@@ -7,3 +7,9 @@ coverage.out
 *.test
 .idea/
 .vscode/
+
+# secrets — never commit
+secret/
+data/
+*.env
+client_secret_*.json

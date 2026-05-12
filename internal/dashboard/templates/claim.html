@@ -1,0 +1,38 @@
+{{define "content"}}
+<div class="login">
+  <h1>Claim an agent 🤖</h1>
+
+  {{if .ClaimError}}
+    <div class="banner">⚠️ {{.ClaimError}}</div>
+    <p><a href="/{{if .Token}}?token={{urlq .Token}}{{end}}">← Home</a></p>
+  {{else if .ClaimAgent}}
+    {{with .ClaimAgent}}
+      <p class="muted">An agent wants to be adopted under your account:</p>
+      <table class="claim-summary">
+        <tr><th>Name</th><td><strong>{{.Name}}</strong></td></tr>
+        {{if .Description}}<tr><th>Description</th><td>{{.Description}}</td></tr>{{end}}
+        <tr><th>Agent ID</th><td><span class="badge">{{.ID}}</span></td></tr>
+        <tr><th>Created</th><td class="muted">{{.CreatedAt.Format "2006-01-02 15:04"}}</td></tr>
+        {{if $.ClaimExpiresAt}}<tr><th>Claim expires</th><td class="muted">{{$.ClaimExpiresAt.Format "2006-01-02 15:04"}}</td></tr>{{end}}
+      </table>
+    {{end}}
+
+    {{if .ClaimedAt}}
+      <div class="banner">✅ Already claimed at {{.ClaimedAt.Format "2006-01-02 15:04"}}.</div>
+    {{else}}
+      <p>If you (or someone you trust) registered this agent, press <strong>Claim</strong> to adopt it.
+      Future actions by this agent will be audit-logged as
+      "<em>{{.ClaimAgent.Name}}</em> on behalf of <em>you</em>".</p>
+
+      <form method="post" action="/v1/agents/claim/{{.ClaimCode}}{{if .Token}}?token={{urlq .Token}}{{end}}">
+        <button type="submit" class="btn-google" style="background:#2a6fdb; color:#fff; border:none;">
+          Claim {{.ClaimAgent.Name}}
+        </button>
+      </form>
+
+      <p class="muted login-future">You must be signed in. If you see "401" after pressing
+      Claim, <a href="/login?next=/claim/{{.ClaimCode}}">sign in first</a> and try again.</p>
+    {{end}}
+  {{end}}
+</div>
+{{end}}

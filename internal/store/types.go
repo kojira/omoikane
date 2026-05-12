@@ -151,6 +151,8 @@ type User struct {
 	AvatarURL       string     `json:"avatar_url,omitempty"`
 	LastLoginAt     *time.Time `json:"last_login_at,omitempty"`
 	EmailVerifiedAt *time.Time `json:"email_verified_at,omitempty"`
+	ParentUserID    string     `json:"parent_user_id,omitempty"` // for agent users — the human who owns them
+	Description     string     `json:"description,omitempty"`
 	// password_hash deliberately omitted from the struct — never read into
 	// app memory unless the password-verification code path needs it
 	// (Phase B). Keeping it out reduces accidental leak surface.

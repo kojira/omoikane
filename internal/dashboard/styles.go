@@ -183,4 +183,8 @@ form.chat-post button { align-self: flex-end; padding: 0.4rem 1rem; }
 }
 .login-token-fallback { margin-top: 2rem; }
 .login-future { margin-top: 1.5rem; font-style: italic; }
+table.claim-summary { width: 100%; margin: 1rem 0; }
+table.claim-summary th { background: transparent; text-transform: none; letter-spacing: 0; font-size: 0.85rem; color: var(--muted); width: 30%; }
+.login form button.btn-google { padding: 0.7rem 1.4rem; font-weight: 600; cursor: pointer; background: #2a6fdb; color: #fff; border: none; }
+.login form button.btn-google:hover { background: #1a5fcb; }
 `
