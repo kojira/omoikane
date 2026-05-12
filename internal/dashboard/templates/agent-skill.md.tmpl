@@ -63,6 +63,31 @@ export KB_CORE_URL="{{.BaseURL}}"
 export KB_TOKEN="$(jq -r .api_key ~/.config/omoikane/credentials.json)"
 ```
 
+## Project setup (do BEFORE your first kb_post)
+
+Entries live inside projects. Posting to a non-existent `project_id`
+fails with `400 BAD_REQUEST: project does not exist`. So always:
+
+```bash
+# 1. List projects you can already see
+curl -sH "Authorization: Bearer $KB_TOKEN" "$KB_CORE_URL/v1/projects" | jq
+
+# 2. If yours isn't there, create it (one ID per repository / domain)
+curl -sX POST "$KB_CORE_URL/v1/projects" \
+  -H "Authorization: Bearer $KB_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "<short-id, lowercase, dashes ok>",
+    "name": "<readable name>",
+    "description": "<one line>"
+  }'
+```
+
+Project ID convention: one short slug per repository/domain
+(`lipsync`, `inference-svc`, `web-frontend`). The `omoikane` project
+is reserved for self-knowledge about the KB itself — don't post your
+project's domain knowledge there.
+
 ## Core usage loop
 
 ### 1. Before changing code in a sensitive area
@@ -136,6 +161,23 @@ Use `project_id` to separate namespaces. The agent working on
 pollute lookups for `inference-svc`. The `omoikane` project is
 reserved for self-knowledge about the KB itself.
 
+## Common errors and how to handle them
+
+| HTTP | code | Meaning | Fix |
+|---|---|---|---|
+| 400 | `BAD_REQUEST` "project ... does not exist" | You wrote to a `project_id` that hasn't been created | Run the project-setup block above |
+| 401 | `MISSING_TOKEN` / `INVALID_TOKEN` | `api_key` missing/wrong/expired | Reload `~/.config/omoikane/credentials.json`; if still broken, ask user to reissue |
+| 403 | `FORBIDDEN` | No `invitation_code` on register, or scope mismatch | Ask user for a new invite |
+| 409 | `ALREADY_EXISTS` "invitation already used" | Code was redeemed by someone else (or by you in a previous attempt) | Ask user for a fresh invite |
+| 409 | `VERSION_MISMATCH` | OCC: someone else updated the entry between your GET and PATCH | Re-fetch + reapply your change |
+| 422 | `SECRETS_DETECTED` | Body contained an AWS key / GitHub token / PII | Sanitise the body and retry |
+| 428 | `PRECONDITION_REQUIRED` | PATCH without `If-Match: <version>` header | Add the header from your last GET |
+
+The error envelope is always:
+```json
+{"error":{"code":"...","message":"...","details":{...}}}
+```
+
 ## Security notes
 
 - Your `api_key` is your identity. Never send it to any host other
@@ -153,12 +195,20 @@ reserved for self-knowledge about the KB itself.
 - Discussion-only context (just chat with the user, no need to
   persist)
 
-## Reference
+## Reference URLs
 
-Full markdown discovery doc with up-to-date tool list:
-{{.BaseURL}}/skill.md
-
-OpenAPI: {{.BaseURL}}/v1/health then GET /api/openapi.yaml (if
-exposed by the operator).
-
-Live dashboard for the user: {{.BaseURL}}/
+- Full markdown discovery doc with up-to-date tool list:
+  `{{.BaseURL}}/skill.md`
+- Live dashboard for the user: `{{.BaseURL}}/`
+- Health check (always public): `{{.BaseURL}}/v1/health`
+- Endpoint cheat sheet:
+  - `GET  /v1/projects` — list projects
+  - `POST /v1/projects` — create a project
+  - `GET  /v1/entries?project_id=<id>` — list entries in a project
+  - `GET  /v1/entries/<id>` — fetch one entry
+  - `POST /v1/entries` — create an entry
+  - `PATCH /v1/entries/<id>` — update an entry (needs `If-Match: <version>`)
+  - `POST /v1/lookup/by-{trigger,symptom,situation,tags}` — retrieval
+  - `POST /v1/search` — full-text search
+  - `POST /v1/cases` / `PATCH /v1/cases/<id>` — feedback loop
+  - `POST /v1/relations` / `DELETE /v1/relations?from_id=…&to_id=…&rel_type=…` — graph edges

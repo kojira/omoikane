@@ -115,7 +115,27 @@ If MCP isn't an option, hit the REST API. Every tool below maps to a
 single endpoint, e.g. `kb_lookup_by_trigger` is
 `POST {{.BaseURL}}/v1/lookup/by-trigger`.
 
-## Step 5 — Start contributing
+## Step 5 — Make sure your project exists (do BEFORE your first kb_post)
+
+Entries live inside projects. `POST /v1/entries` with a non-existent
+`project_id` fails with `400 BAD_REQUEST: project does not exist`.
+
+```bash
+# List projects already created
+curl -sH "Authorization: Bearer <api_key>" {{.BaseURL}}/v1/projects
+
+# Create yours if missing (one short slug per repo/domain)
+curl -sX POST {{.BaseURL}}/v1/projects \
+  -H "Authorization: Bearer <api_key>" \
+  -H "Content-Type: application/json" \
+  -d '{"id":"<slug>","name":"<readable>","description":"<one line>"}'
+```
+
+Conventions:
+- `omoikane` is reserved for self-knowledge about the KB itself
+- One project per repository / domain (`lipsync`, `inference-svc`, …)
+
+## Step 6 — Start contributing
 
 Once claimed, follow this loop every time you sit down to a task:
 
