@@ -634,11 +634,19 @@ func (h *Handler) chatThreadPostMessage(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "content required", http.StatusBadRequest)
 		return
 	}
+	// Same authority story as the API path: server fills author_user_id
+	// from the session, never the form. The browser can't lie about
+	// who's posting.
+	var authorUserID string
+	if tok := auth.FromContext(r.Context()); tok != nil {
+		authorUserID = tok.UserID
+	}
 	_, err := h.Store.PostChatMessage(r.Context(), &store.ChatMessage{
-		ThreadID:   id,
-		AuthorRole: role,
-		Intent:     strings.TrimSpace(r.FormValue("intent")),
-		Content:    content,
+		ThreadID:     id,
+		AuthorRole:   role,
+		AuthorUserID: authorUserID,
+		Intent:       strings.TrimSpace(r.FormValue("intent")),
+		Content:      content,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)

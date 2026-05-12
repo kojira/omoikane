@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -142,6 +143,49 @@ func TestChatPostMessageForm(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != 400 {
 		t.Fatalf("bad role: %d", resp.StatusCode)
+	}
+}
+
+// When a message is posted through the authed surface, the rendered
+// thread page should link the author badge to /u/{author_user_id} so
+// clicking it takes you to that user's profile. Locks the end-to-end
+// chain: form post → store → render → click-through.
+func TestChatAuthorBadgeLinksToProfile(t *testing.T) {
+	srv, st, tok := mountAuthed(t) // mounts as alice, auth required
+	ctx := context.Background()
+	tid, _ := st.OpenThread(ctx, &store.ChatThread{Title: "linkage test"})
+
+	// Post via the dashboard form path — should fill author_user_id
+	// from session/token automatically.
+	form := url.Values{}
+	form.Set("content", "alice writes a line")
+	req, _ := http.NewRequest(http.MethodPost,
+		srv.URL+"/chat/"+tid+"/post?token="+tok,
+		strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("post: %d", resp.StatusCode)
+	}
+
+	// Store should now know who wrote it.
+	msgs, _ := st.ListChatMessages(ctx, tid, 10)
+	if len(msgs) != 1 || msgs[0].AuthorUserID != "alice" {
+		t.Fatalf("author_user_id not filled: %+v", msgs)
+	}
+
+	// Render the thread page and look for the link.
+	r2, _ := http.Get(srv.URL + "/chat/" + tid + "?token=" + tok)
+	defer r2.Body.Close()
+	body, _ := io.ReadAll(r2.Body)
+	want := `href="/u/alice`
+	if !strings.Contains(string(body), want) {
+		t.Errorf("author badge isn't a link to /u/alice: looking for %q in:\n%s",
+			want, string(body)[:1500])
 	}
 }
 

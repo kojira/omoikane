@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/kojira/omoikane/internal/auth"
 	"github.com/kojira/omoikane/internal/store"
 )
 
@@ -203,10 +204,20 @@ func (h *Handler) chatPost(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, CodeBadJSON, err.Error(), nil)
 		return
 	}
+	// author_user_id is server-side authority: we pull it from the
+	// auth context, never from the request body. This means a reader
+	// can trust the link from "this message" → "this profile" — no
+	// way for a client to impersonate someone else here.
+	var authorUserID string
+	if tok := auth.FromContext(r.Context()); tok != nil {
+		authorUserID = tok.UserID
+	}
 	id, err := h.Store.PostChatMessage(httpCtx(r), &store.ChatMessage{
 		ThreadID: req.ThreadID, AuthorRole: req.AuthorRole,
-		AuthorInstanceID: req.AuthorInstanceID, ReplyTo: req.ReplyTo,
-		Mentions: req.Mentions, Intent: req.Intent, Content: req.Content,
+		AuthorInstanceID: req.AuthorInstanceID,
+		AuthorUserID:     authorUserID,
+		ReplyTo:          req.ReplyTo,
+		Mentions:         req.Mentions, Intent: req.Intent, Content: req.Content,
 		RelatedEntries: req.RelatedEntries,
 		InputTokens:    req.InputTokens, OutputTokens: req.OutputTokens,
 	})

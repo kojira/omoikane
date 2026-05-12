@@ -18,7 +18,12 @@
   {{range .ChatMessages}}
   <div class="chat-msg chat-msg-{{.AuthorRole}}">
     <div class="chat-meta">
+      {{if .AuthorUserID}}
+      <a class="badge chat-author-{{.AuthorRole}}" href="/u/{{.AuthorUserID}}{{if $.Token}}?token={{urlq $.Token}}{{end}}"
+         title="View profile of {{.AuthorUserID}}">{{.AuthorRole}}</a>
+      {{else}}
       <span class="badge chat-author-{{.AuthorRole}}">{{.AuthorRole}}</span>
+      {{end}}
       {{if .AuthorInstanceID}}<span class="muted">{{.AuthorInstanceID}}</span>{{end}}
       {{if .Intent}}<span class="badge">{{.Intent}}</span>{{end}}
       <span class="muted">{{.Timestamp.Format "2006-01-02 15:04:05"}}</span>

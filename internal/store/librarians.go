@@ -210,14 +210,19 @@ type ChatMessage struct {
 	Timestamp        time.Time
 	AuthorRole       string
 	AuthorInstanceID string
-	ReplyTo          string
-	Mentions         string
-	Intent           string
-	Content          string
-	RelatedEntries   string
-	InputTokens      int
-	OutputTokens     int
-	Metadata         string
+	// AuthorUserID is the users.id of whoever actually posted this
+	// message — the auth-context source of truth. Empty for legacy
+	// messages written before migration 012. The API layer fills this
+	// in from the bearer token; clients can't set it themselves.
+	AuthorUserID   string
+	ReplyTo        string
+	Mentions       string
+	Intent         string
+	Content        string
+	RelatedEntries string
+	InputTokens    int
+	OutputTokens   int
+	Metadata       string
 }
 
 func (s *Store) OpenThread(ctx context.Context, t *ChatThread) (string, error) {
@@ -316,12 +321,13 @@ func (s *Store) PostChatMessage(ctx context.Context, m *ChatMessage) (string, er
 	}
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO librarian_chat(id, thread_id, author_role, author_instance_id,
-		    reply_to, mentions, intent, content, related_entries,
+		    author_user_id, reply_to, mentions, intent, content, related_entries,
 		    input_tokens, output_tokens, metadata)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		m.ID, nullable(m.ThreadID), m.AuthorRole, nullable(m.AuthorInstanceID),
-		nullable(m.ReplyTo), nullable(m.Mentions), nullable(m.Intent), m.Content,
-		nullable(m.RelatedEntries), m.InputTokens, m.OutputTokens, nullable(m.Metadata))
+		nullable(m.AuthorUserID), nullable(m.ReplyTo), nullable(m.Mentions),
+		nullable(m.Intent), m.Content, nullable(m.RelatedEntries),
+		m.InputTokens, m.OutputTokens, nullable(m.Metadata))
 	if err != nil {
 		return "", translateErr(err)
 	}
@@ -334,9 +340,9 @@ func (s *Store) ListChatMessages(ctx context.Context, threadID string, limit int
 	}
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, COALESCE(thread_id,''), timestamp, author_role,
-		       COALESCE(author_instance_id,''), COALESCE(reply_to,''),
-		       COALESCE(mentions,''), COALESCE(intent,''), content,
-		       COALESCE(related_entries,''), input_tokens, output_tokens,
+		       COALESCE(author_instance_id,''), COALESCE(author_user_id,''),
+		       COALESCE(reply_to,''), COALESCE(mentions,''), COALESCE(intent,''),
+		       content, COALESCE(related_entries,''), input_tokens, output_tokens,
 		       COALESCE(metadata,'')
 		FROM librarian_chat WHERE thread_id = ?
 		ORDER BY timestamp ASC LIMIT ?`, threadID, limit)
@@ -345,8 +351,9 @@ func (s *Store) ListChatMessages(ctx context.Context, threadID string, limit int
 	}
 	values, err := mapRows[ChatMessage](rows, func(c rowScanner, m *ChatMessage) error {
 		return c.Scan(&m.ID, &m.ThreadID, &m.Timestamp, &m.AuthorRole,
-			&m.AuthorInstanceID, &m.ReplyTo, &m.Mentions, &m.Intent, &m.Content,
-			&m.RelatedEntries, &m.InputTokens, &m.OutputTokens, &m.Metadata)
+			&m.AuthorInstanceID, &m.AuthorUserID, &m.ReplyTo, &m.Mentions,
+			&m.Intent, &m.Content, &m.RelatedEntries, &m.InputTokens,
+			&m.OutputTokens, &m.Metadata)
 	})
 	if err != nil {
 		return nil, err

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -130,6 +131,57 @@ func TestLibrarianChat(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != 204 {
 		t.Fatalf("close-empty: %d", resp.StatusCode)
+	}
+}
+
+// chatPost must derive author_user_id from the auth token, never from
+// the request body. Migration 012 adds this column and the handler
+// fills it server-side; this test locks both halves:
+//   1) the field is populated for new messages
+//   2) a client-supplied author_user_id is ignored (no impersonation)
+func TestLibrarianChatAuthorUserIDFromAuthContext(t *testing.T) {
+	base, tok, st := testServer(t)
+	t.Cleanup(ResetEmergencyStopForTest)
+
+	// Open thread.
+	s, raw := doJSON(t, http.MethodPost, base+"/v1/librarian/threads", tok,
+		map[string]any{"title": "authorship test"}, nil)
+	if s != 201 {
+		t.Fatalf("open: %d %s", s, raw)
+	}
+	var thr struct {
+		ThreadID string `json:"thread_id"`
+	}
+	_ = json.Unmarshal(raw, &thr)
+
+	// Post a message AND try to spoof the author by sending a different
+	// author_user_id in the body. The server must ignore that field.
+	s, _ = doJSON(t, http.MethodPost, base+"/v1/librarian/chat", tok,
+		map[string]any{
+			"thread_id":      thr.ThreadID,
+			"author_role":    "coordinator",
+			"content":        "this should be attributed to me",
+			"author_user_id": "u-impersonated-id", // attempted spoof — ignored
+		}, nil)
+	if s != 201 {
+		t.Fatalf("post: %d", s)
+	}
+
+	// Verify directly via the store (cleanest source of truth — no
+	// dependency on the messages API surfacing the field yet).
+	msgs, err := st.ListChatMessages(context.Background(), thr.ThreadID, 10)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("want 1 message, got %d", len(msgs))
+	}
+	if msgs[0].AuthorUserID != "admin" {
+		t.Errorf("author_user_id not bound to bearer-token user: got %q, want %q",
+			msgs[0].AuthorUserID, "admin")
+	}
+	if msgs[0].AuthorUserID == "u-impersonated-id" {
+		t.Fatal("CRITICAL: client spoof was honoured — impersonation possible")
 	}
 }
 
