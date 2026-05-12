@@ -47,7 +47,8 @@ func TestServeSkillMD(t *testing.T) {
 		"kb_lookup_by_trigger",
 		"kb_post",
 		"kb_feedback",
-		"# omoikane",
+		"Hello, AI agent",
+		"Install yourself as a skill",
 		"invitation_code",
 		"invitation code",
 	} {
