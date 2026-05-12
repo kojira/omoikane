@@ -4,10 +4,54 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 )
+
+// mentionRE matches `@<role>` tokens at word boundaries. The leading
+// `(^|\W)` is a manual look-behind since Go's regexp engine doesn't
+// support `\b` after a non-word character cleanly; this keeps
+// `email@curator.com` from spuriously matching.
+var mentionRE = regexp.MustCompile(
+	`(^|\W)@(coordinator|cataloger|curator|detective|conservator|scout|summarizer|judge|human)\b`)
+
+// ExtractMentions returns the list of `@<role>` tokens (deduplicated,
+// insertion-ordered) referenced in `content`. Roles are limited to the
+// 8 librarians + human. Plain emails / URLs containing role-shaped
+// strings do not match. Returns nil (not an empty slice) when nothing
+// matches, so callers can use `len(...) == 0` and reflect.DeepEqual
+// both work as expected.
+func ExtractMentions(content string) []string {
+	matches := mentionRE.FindAllStringSubmatch(content, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, m := range matches {
+		tag := "@" + m[2]
+		if seen[tag] {
+			continue
+		}
+		seen[tag] = true
+		out = append(out, tag)
+	}
+	return out
+}
+
+// encodeMentions returns a JSON array string for storage. We always
+// produce a valid JSON literal so downstream consumers can `json.Unmarshal`
+// the column without a "is it the empty string?" branch.
+func encodeMentions(tags []string) string {
+	if len(tags) == 0 {
+		return ""
+	}
+	b, _ := json.Marshal(tags)
+	return string(b)
+}
 
 // LibrarianInstance is one running (or paused) librarian.
 type LibrarianInstance struct {
@@ -22,6 +66,8 @@ type LibrarianInstance struct {
 }
 
 // ValidLibrarianRole reports whether r is one of the 8 canonical roles.
+// Used for `librarian_instances.role` and `librarian_tasks.role` — these
+// belong to specific agents, so the human author is NOT accepted here.
 func ValidLibrarianRole(r string) bool {
 	switch r {
 	case "coordinator", "cataloger", "curator", "detective",
@@ -29,6 +75,18 @@ func ValidLibrarianRole(r string) bool {
 		return true
 	}
 	return false
+}
+
+// ValidChatAuthor is the broader set of accepted `author_role` values
+// on `librarian_chat`. In addition to the 8 librarians, "human" is
+// allowed so the user (Z-axis observer per design.md §24) can join the
+// shared chat. Phase 5 ships this so the dashboard chat room is
+// actually two-way.
+func ValidChatAuthor(r string) bool {
+	if r == "human" {
+		return true
+	}
+	return ValidLibrarianRole(r)
 }
 
 func newLibrarianID(prefix string) string {
@@ -240,7 +298,7 @@ func (s *Store) ListThreads(ctx context.Context, status string, limit int) ([]*C
 }
 
 func (s *Store) PostChatMessage(ctx context.Context, m *ChatMessage) (string, error) {
-	if !ValidLibrarianRole(m.AuthorRole) {
+	if !ValidChatAuthor(m.AuthorRole) {
 		return "", fmt.Errorf("%w: invalid author_role %q", ErrInvalidInput, m.AuthorRole)
 	}
 	if strings.TrimSpace(m.Content) == "" {
@@ -248,6 +306,13 @@ func (s *Store) PostChatMessage(ctx context.Context, m *ChatMessage) (string, er
 	}
 	if m.ID == "" {
 		m.ID = newLibrarianID("msg")
+	}
+	// Auto-extract `@<role>` mentions from the body when the caller
+	// hasn't supplied them explicitly. Honour caller-provided values
+	// verbatim so a tool that wants to mention a non-textual role (or
+	// suppress mentions entirely with `"[]"`) can.
+	if m.Mentions == "" {
+		m.Mentions = encodeMentions(ExtractMentions(m.Content))
 	}
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO librarian_chat(id, thread_id, author_role, author_instance_id,

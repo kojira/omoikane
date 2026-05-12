@@ -83,11 +83,47 @@ func RequireScope(scope string) func(http.Handler) http.Handler {
 	}
 }
 
+// SessionCookieToBearer promotes a session cookie (set by the OAuth
+// callback flow) into an Authorization: Bearer header so the existing
+// authentication middleware processes it identically to API tokens.
+// Order before Authenticate; matched cookie name comes from
+// api.sessionCookieName.
+func SessionCookieToBearer(cookieName string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Authorization") == "" {
+				if c, err := r.Cookie(cookieName); err == nil && c.Value != "" {
+					r.Header.Set("Authorization", "Bearer "+c.Value)
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // AllowQueryTokenForGET lets the dashboard pass tokens via ?token=… for GET
 // requests only (development convenience). Order before Authenticate.
 func AllowQueryTokenForGET(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.Header.Get("Authorization") == "" {
+			if t := r.URL.Query().Get("token"); t != "" {
+				r.Header.Set("Authorization", "Bearer "+t)
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// AllowQueryTokenAny is the same as AllowQueryTokenForGET but also
+// promotes the token for POST/PATCH/DELETE — needed for the chat-room
+// form submissions in the dashboard. Browsers can't set custom headers
+// on plain form POSTs, so we accept the token via query string here.
+// Risk acknowledged: this opens a CSRF vector if the dashboard runs on
+// a shared host with cookie-bearing third-party content. For Phase 5's
+// single-user local dashboard, the tradeoff is acceptable.
+func AllowQueryTokenAny(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" {
 			if t := r.URL.Query().Get("token"); t != "" {
 				r.Header.Set("Authorization", "Bearer "+t)
 			}

@@ -7,10 +7,12 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/kojira/omoikane/internal/auth"
+	"github.com/kojira/omoikane/internal/auth/oauth"
 	"github.com/kojira/omoikane/internal/config"
 	"github.com/kojira/omoikane/internal/enrich"
 	"github.com/kojira/omoikane/internal/store"
@@ -23,6 +25,14 @@ type Handler struct {
 	Logger      *slog.Logger
 	StartedAt   string
 	BuildInfo   string
+
+	// Phase A auth — nil disables OAuth login (the rest of the API
+	// keeps working with admin-issued Bearer tokens).
+	OAuthGoogle      oauth.Provider
+	AuthAllowDomains []string
+	AuthAllowEmails  []string
+	HTTPSEnabled     bool
+	SessionTTL       time.Duration
 }
 
 // Mount registers the Phase 1 surface on r under /v1. Process-wide middleware
@@ -37,8 +47,17 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Route("/v1", func(r chi.Router) {
 		r.Get("/health", h.health)
 
+		// Phase A — OAuth flow (public; no auth required to initiate)
+		r.Get("/auth/google/login", h.authGoogleLogin)
+		r.Get("/auth/google/callback", h.authGoogleCallback)
+		r.Post("/auth/logout", h.authLogout)
+
 		r.Group(func(r chi.Router) {
+			// Promote browser session cookies to Bearer tokens so the
+			// existing token-based auth middleware sees them.
+			r.Use(auth.SessionCookieToBearer(sessionCookieName))
 			r.Use(authMW.Authenticate)
+			r.Get("/auth/me", h.authMe)
 
 			r.With(auth.RequireScope("read")).Get("/projects", h.listProjects)
 			r.With(auth.RequireScope("read")).Get("/projects/{id}", h.getProject)
@@ -136,6 +155,12 @@ func (h *Handler) Mount(r chi.Router) {
 
 			// Phase 6 — tier listing
 			r.With(auth.RequireScope("read")).Get("/tiers", h.tierList)
+
+			// Phase 6+ — open-work loop (agent-first; see entry X-SQATAB)
+			r.With(auth.RequireScope("read")).Get("/open_work", h.listOpenWork)
+			r.With(auth.RequireScope("write")).Post("/entries/{id}/claim", h.claimOpenWork)
+			r.With(auth.RequireScope("write")).Post("/entries/{id}/release", h.releaseOpenWork)
+			r.With(auth.RequireScope("write")).Post("/entries/{id}/mark_merged", h.mergeOpenWork)
 
 			// Phase 7 — admin: backup, dead-pool, LLM usage, coverage
 			r.Route("/admin", func(r chi.Router) {

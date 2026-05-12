@@ -153,6 +153,7 @@ type fakeAdminStore struct {
 	getUserErr    error
 	createUserErr error
 	createTokErr  error
+	setEmailErr   error
 	user          *store.User
 	closeCalled   bool
 }
@@ -169,13 +170,16 @@ func (f *fakeAdminStore) CreateToken(_ context.Context, _, _ string, _ []string,
 	}
 	return "plain-token-abc", nil
 }
+func (f *fakeAdminStore) SetUserEmail(_ context.Context, _, _ string) error {
+	return f.setEmailErr
+}
 func (f *fakeAdminStore) Close() error { f.closeCalled = true; return nil }
 
 func TestRunAdminTokenGetUserUnknownError(t *testing.T) {
 	stderr := &bytes.Buffer{}
 	code := runAdminToken(context.Background(),
 		&fakeAdminStore{getUserErr: io.ErrUnexpectedEOF},
-		"u", "n", "admin", "read", 0, &bytes.Buffer{}, stderr)
+		"u", "n", "admin", "read", "", 0, &bytes.Buffer{}, stderr)
 	if code != 1 {
 		t.Fatalf("code=%d", code)
 	}
@@ -191,7 +195,7 @@ func TestRunAdminTokenCreateUserError(t *testing.T) {
 			getUserErr:    store.ErrNotFound,
 			createUserErr: io.ErrUnexpectedEOF,
 		},
-		"u", "n", "admin", "read", 0, &bytes.Buffer{}, stderr)
+		"u", "n", "admin", "read", "", 0, &bytes.Buffer{}, stderr)
 	if code != 1 {
 		t.Fatalf("code=%d", code)
 	}
@@ -207,7 +211,7 @@ func TestRunAdminTokenCreateTokenError(t *testing.T) {
 			getUserErr:   store.ErrNotFound,
 			createTokErr: io.ErrUnexpectedEOF,
 		},
-		"u", "n", "admin", "read", 0, &bytes.Buffer{}, stderr)
+		"u", "n", "admin", "read", "", 0, &bytes.Buffer{}, stderr)
 	if code != 1 {
 		t.Fatalf("code=%d", code)
 	}

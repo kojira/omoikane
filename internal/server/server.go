@@ -20,6 +20,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/kojira/omoikane/internal/api"
+	"github.com/kojira/omoikane/internal/auth/oauth"
 	"github.com/kojira/omoikane/internal/config"
 	"github.com/kojira/omoikane/internal/dashboard"
 	"github.com/kojira/omoikane/internal/enrich"
@@ -182,11 +183,25 @@ func BuildRouter(st *store.Store, cfg *config.Config, logger *slog.Logger) (http
 		Logger:      logger,
 		StartedAt:   time.Now().UTC().Format(time.RFC3339),
 		BuildInfo:   BuildVersion,
+
+		AuthAllowDomains: cfg.AuthAllowDomains,
+		AuthAllowEmails:  cfg.AuthAllowEmails,
+		HTTPSEnabled:     cfg.HTTPSEnabled,
+		SessionTTL:       cfg.SessionTTL,
+	}
+	if cfg.GoogleClientID != "" && cfg.GoogleClientSecret != "" && cfg.OAuthRedirectBase != "" {
+		apiH.OAuthGoogle = &oauth.Google{
+			ClientID:     cfg.GoogleClientID,
+			ClientSecret: cfg.GoogleClientSecret,
+			RedirectURI:  cfg.OAuthRedirectBase + "/v1/auth/google/callback",
+		}
+		logger.Info("oauth.google configured", "redirect", apiH.OAuthGoogle.(*oauth.Google).RedirectURI)
 	}
 	dashH, err := newDashboard(st, cfg.DashboardOpen)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: %w", err)
 	}
+	dashH.GoogleEnabled = apiH.OAuthGoogle != nil
 
 	root := chi.NewRouter()
 	root.Use(api.RequestID)
@@ -209,6 +224,7 @@ type AdminStorer interface {
 	GetUser(ctx context.Context, id string) (*store.User, error)
 	CreateUser(ctx context.Context, u *store.User) error
 	CreateToken(ctx context.Context, userID, name string, scopes []string, expiresAt *time.Time) (string, error)
+	SetUserEmail(ctx context.Context, userID, email string) error
 	Close() error
 }
 
@@ -225,6 +241,7 @@ func AdminToken(args []string, stdout, stderr io.Writer) int {
 	name := fs.String("name", "default", "human-readable token name")
 	scopes := fs.String("scopes", "read,write,admin", "comma-separated scopes")
 	role := fs.String("role", "admin", "user role when creating the user")
+	email := fs.String("email", "", "set or update user's email (enables Google OAuth login matching)")
 	ttl := fs.Duration("ttl", 0, "token TTL (0 = no expiry)")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -243,17 +260,24 @@ func AdminToken(args []string, stdout, stderr io.Writer) int {
 	}
 	defer st.Close()
 
-	return runAdminToken(ctx, st, *user, *name, *role, *scopes, *ttl, stdout, stderr)
+	return runAdminToken(ctx, st, *user, *name, *role, *scopes, *email, *ttl, stdout, stderr)
 }
 
-func runAdminToken(ctx context.Context, st AdminStorer, user, name, role, scopes string, ttl time.Duration, stdout, stderr io.Writer) int {
+func runAdminToken(ctx context.Context, st AdminStorer, user, name, role, scopes, email string, ttl time.Duration, stdout, stderr io.Writer) int {
 	if _, err := st.GetUser(ctx, user); err != nil {
 		if !errors.Is(err, store.ErrNotFound) {
 			fmt.Fprintln(stderr, "lookup user:", err)
 			return 1
 		}
-		if err := st.CreateUser(ctx, &store.User{ID: user, Name: user, Role: role}); err != nil {
+		if err := st.CreateUser(ctx, &store.User{ID: user, Name: user, Role: role, Email: email}); err != nil {
 			fmt.Fprintln(stderr, "create user:", err)
+			return 1
+		}
+	} else if email != "" {
+		// Existing user — update / set email so a future Google login can
+		// be matched to this account.
+		if err := st.SetUserEmail(ctx, user, email); err != nil {
+			fmt.Fprintln(stderr, "set email:", err)
 			return 1
 		}
 	}
@@ -273,6 +297,9 @@ func runAdminToken(ctx context.Context, st AdminStorer, user, name, role, scopes
 	fmt.Fprintln(stdout, "USER  :", user)
 	fmt.Fprintln(stdout, "NAME  :", name)
 	fmt.Fprintln(stdout, "SCOPES:", scopes)
+	if email != "" {
+		fmt.Fprintln(stdout, "EMAIL :", email)
+	}
 	if expiresAt != nil {
 		fmt.Fprintln(stdout, "EXPIRY:", expiresAt.Format(time.RFC3339))
 	}

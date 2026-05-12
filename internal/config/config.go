@@ -36,6 +36,15 @@ type Config struct {
 	ClusterInterval     time.Duration // Phase 3: background incident clustering cadence; 0 disables
 	ClusterThreshold    float64       // Phase 3: Jaccard threshold for clustering (default 0.4)
 	ClusterMinMembers   int           // Phase 3: minimum group size to surface a cluster (default 2)
+
+	// Phase A auth (Google OAuth)
+	GoogleClientID     string   // KB_OAUTH_GOOGLE_CLIENT_ID
+	GoogleClientSecret string   // KB_OAUTH_GOOGLE_CLIENT_SECRET
+	OAuthRedirectBase  string   // KB_OAUTH_REDIRECT_BASE (e.g. https://kb.example.com)
+	AuthAllowDomains   []string // KB_AUTH_ALLOW_DOMAINS=foo.com,bar.com — domain allow-list for new signups
+	AuthAllowEmails    []string // KB_AUTH_ALLOW_EMAILS=alice@x.com,bob@y.com — explicit email allow-list (OR with domain list)
+	HTTPSEnabled       bool     // KB_HTTPS=1 → mark cookies Secure, expect https redirects
+	SessionTTL         time.Duration // KB_SESSION_TTL — default 24h
 }
 
 // Load reads configuration from environment variables (see design.md §10 /
@@ -90,7 +99,36 @@ func Load() (*Config, error) {
 	}
 	c.ClusterMinMembers = int(minMembers)
 
+	// Phase A auth — all optional. Google OAuth simply stays disabled
+	// if client_id / client_secret are unset.
+	c.GoogleClientID = os.Getenv("KB_OAUTH_GOOGLE_CLIENT_ID")
+	c.GoogleClientSecret = os.Getenv("KB_OAUTH_GOOGLE_CLIENT_SECRET")
+	c.OAuthRedirectBase = strings.TrimRight(os.Getenv("KB_OAUTH_REDIRECT_BASE"), "/")
+	c.AuthAllowDomains = splitCSVConfig(os.Getenv("KB_AUTH_ALLOW_DOMAINS"))
+	c.AuthAllowEmails = splitCSVConfig(os.Getenv("KB_AUTH_ALLOW_EMAILS"))
+	c.HTTPSEnabled = envBool("KB_HTTPS", false)
+	sessTTL, err := envDuration("KB_SESSION_TTL", 24*time.Hour)
+	if err != nil {
+		return nil, fmt.Errorf("KB_SESSION_TTL: %w", err)
+	}
+	c.SessionTTL = sessTTL
+
 	return c, nil
+}
+
+func splitCSVConfig(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(strings.ToLower(p))
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func envDuration(key string, fallback time.Duration) (time.Duration, error) {

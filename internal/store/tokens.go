@@ -36,25 +36,201 @@ func (s *Store) CreateUser(ctx context.Context, u *User) error {
 	if u.Role == "" {
 		u.Role = "member"
 	}
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO users(id, name, role) VALUES (?, ?, ?)`,
-		u.ID, u.Name, u.Role)
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO users(id, name, role, email, google_sub, avatar_url)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		u.ID, u.Name, u.Role,
+		nullable(strings.ToLower(strings.TrimSpace(u.Email))),
+		nullable(u.GoogleSub),
+		nullable(u.AvatarURL))
 	return translateErr(err)
 }
 
+// userSelect lists every column we scan into a User (in fixed order).
+// Centralised so the half-dozen lookup paths stay in sync.
+const userSelect = `
+	id, name, role, created_at,
+	COALESCE(email,''), COALESCE(google_sub,''),
+	COALESCE(avatar_url,''), last_login_at, email_verified_at`
+
+func scanUser(r scanOne, u *User) error {
+	var last, verified nullTimeBox
+	if err := r.Scan(&u.ID, &u.Name, &u.Role, &u.CreatedAt,
+		&u.Email, &u.GoogleSub, &u.AvatarURL, &last, &verified); err != nil {
+		return err
+	}
+	if last.Valid {
+		t := last.Time
+		u.LastLoginAt = &t
+	}
+	if verified.Valid {
+		t := verified.Time
+		u.EmailVerifiedAt = &t
+	}
+	return nil
+}
+
 func (s *Store) GetUser(ctx context.Context, id string) (*User, error) {
-	row := s.db.QueryRowContext(ctx,
-		`SELECT id, name, role, created_at FROM users WHERE id = ?`, id)
 	var u User
-	if err := row.Scan(&u.ID, &u.Name, &u.Role, &u.CreatedAt); err != nil {
+	err := scanUser(s.db.QueryRowContext(ctx,
+		`SELECT `+userSelect+` FROM users WHERE id = ?`, id), &u)
+	if err != nil {
 		return nil, translateErr(err)
 	}
 	return &u, nil
 }
 
-// CreateToken issues a new API token. Returns the *plain* token exactly
-// once.
+// GetUserByEmail returns the user with the matching (case-insensitive)
+// email. Email is normalised to lowercase on write so a simple equality
+// query suffices.
+func (s *Store) GetUserByEmail(ctx context.Context, email string) (*User, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if email == "" {
+		return nil, ErrNotFound
+	}
+	var u User
+	err := scanUser(s.db.QueryRowContext(ctx,
+		`SELECT `+userSelect+` FROM users WHERE email = ?`, email), &u)
+	if err != nil {
+		return nil, translateErr(err)
+	}
+	return &u, nil
+}
+
+// GetUserByGoogleSub returns the user with the matching Google subject
+// identifier. `sub` is the canonical, immutable identifier — email can
+// change but `sub` does not.
+func (s *Store) GetUserByGoogleSub(ctx context.Context, sub string) (*User, error) {
+	if sub == "" {
+		return nil, ErrNotFound
+	}
+	var u User
+	err := scanUser(s.db.QueryRowContext(ctx,
+		`SELECT `+userSelect+` FROM users WHERE google_sub = ?`, sub), &u)
+	if err != nil {
+		return nil, translateErr(err)
+	}
+	return &u, nil
+}
+
+// SetUserEmail updates the email (and ensures lowercasing). Returns
+// ErrAlreadyExists when another user already owns that email.
+func (s *Store) SetUserEmail(ctx context.Context, userID, email string) error {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if email == "" {
+		return fmt.Errorf("%w: email required", ErrInvalidInput)
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE users SET email = ? WHERE id = ?`, email, userID)
+	if err != nil {
+		return translateErr(err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// LinkGoogleIdentity attaches a google_sub (+ optional avatar) to an
+// existing user. Use when a Google login matches an existing user by
+// email but the user was previously bootstrap-only.
+func (s *Store) LinkGoogleIdentity(ctx context.Context, userID, googleSub, avatarURL string) error {
+	if googleSub == "" {
+		return fmt.Errorf("%w: google_sub required", ErrInvalidInput)
+	}
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE users
+		SET google_sub = ?, avatar_url = COALESCE(NULLIF(?, ''), avatar_url)
+		WHERE id = ?`, googleSub, avatarURL, userID)
+	if err != nil {
+		return translateErr(err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// RecordLogin stamps last_login_at = now. Best-effort; ignored if the
+// user vanished mid-flight.
+func (s *Store) RecordLogin(ctx context.Context, userID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?`, userID)
+	return translateErr(err)
+}
+
+// ProvisionGoogleUser is the canonical "first Google login from this
+// identity" helper. It tries, in order:
+//
+//  1. Find by `google_sub` → return existing user (already linked)
+//  2. Find by `email` → link Google to existing user, return it
+//  3. Create a new user with role="member" (called only when the caller
+//     has already verified the email/domain is allowed)
+//
+// `name` may be the Google display name; we keep `email`'s local-part
+// as a fallback.
+func (s *Store) ProvisionGoogleUser(ctx context.Context, email, googleSub, name, avatarURL string) (*User, error) {
+	if existing, err := s.GetUserByGoogleSub(ctx, googleSub); err == nil {
+		return existing, nil
+	}
+	if existing, err := s.GetUserByEmail(ctx, email); err == nil {
+		if err := s.LinkGoogleIdentity(ctx, existing.ID, googleSub, avatarURL); err != nil {
+			return nil, err
+		}
+		return s.GetUser(ctx, existing.ID)
+	}
+	// Mint a fresh user
+	id, err := newUserID()
+	if err != nil {
+		return nil, err
+	}
+	if name == "" {
+		name = email
+	}
+	u := &User{
+		ID: id, Name: name, Role: "member",
+		Email:     strings.ToLower(strings.TrimSpace(email)),
+		GoogleSub: googleSub,
+		AvatarURL: avatarURL,
+	}
+	if err := s.CreateUser(ctx, u); err != nil {
+		return nil, err
+	}
+	return s.GetUser(ctx, id)
+}
+
+// newUserID returns a fresh user identifier ("u-<8 hex>"). Distinct from
+// existing manual IDs (kept short to avoid clobbering migration / admin
+// scripts that use string IDs like "admin" or "me").
+func newUserID() (string, error) {
+	var b [4]byte
+	if _, err := randRead(b[:]); err != nil {
+		return "", fmt.Errorf("rand: %w", err)
+	}
+	return "u-" + hex.EncodeToString(b[:]), nil
+}
+
+// CreateToken issues a new long-lived API token (token_type='api'). Use
+// CreateSessionToken for short-lived browser sessions. Returns the
+// *plain* token exactly once.
 func (s *Store) CreateToken(ctx context.Context, userID, name string, scopes []string, expiresAt *time.Time) (string, error) {
+	return s.createToken(ctx, userID, name, scopes, expiresAt, "api")
+}
+
+// CreateSessionToken issues a short-lived browser session as a
+// token_type='session' row in api_tokens. Same hash + lookup as
+// regular tokens so all authz code keeps working unchanged.
+func (s *Store) CreateSessionToken(ctx context.Context, userID, name string, scopes []string, ttl time.Duration) (string, error) {
+	if ttl <= 0 {
+		ttl = 24 * time.Hour
+	}
+	expiry := time.Now().Add(ttl)
+	return s.createToken(ctx, userID, name, scopes, &expiry, "session")
+}
+
+func (s *Store) createToken(ctx context.Context, userID, name string, scopes []string, expiresAt *time.Time, tokenType string) (string, error) {
 	if name == "" {
 		return "", fmt.Errorf("%w: name required", ErrInvalidInput)
 	}
@@ -67,13 +243,27 @@ func (s *Store) CreateToken(ctx context.Context, userID, name string, scopes []s
 	}
 	hash := HashToken(plain)
 	_, err = s.db.ExecContext(ctx, `
-		INSERT INTO api_tokens(token_hash, user_id, name, scopes, expires_at)
-		VALUES (?, ?, ?, ?, ?)`,
-		hash, nullable(userID), name, joinScopes(scopes), nullableTime(expiresAt))
+		INSERT INTO api_tokens(token_hash, user_id, name, scopes, expires_at, token_type)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		hash, nullable(userID), name, joinScopes(scopes), nullableTime(expiresAt), tokenType)
 	if err != nil {
 		return "", translateErr(err)
 	}
 	return plain, nil
+}
+
+// RevokeToken deletes a token by its plain form. Used for logout.
+func (s *Store) RevokeToken(ctx context.Context, plain string) error {
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM api_tokens WHERE token_hash = ?`, HashToken(plain))
+	if err != nil {
+		return translateErr(err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // LookupToken finds an active token by its plain form. Bumps last_used_at
@@ -82,6 +272,7 @@ func (s *Store) LookupToken(ctx context.Context, plain string) (*APIToken, error
 	hash := HashToken(plain)
 	row := s.db.QueryRowContext(ctx, `
 		SELECT token_hash, COALESCE(user_id,''), name, scopes,
+		       COALESCE(token_type,'api'),
 		       created_at, expires_at, last_used_at
 		FROM api_tokens WHERE token_hash = ?`, hash)
 	var (
@@ -90,7 +281,7 @@ func (s *Store) LookupToken(ctx context.Context, plain string) (*APIToken, error
 		expN, luN  nullTimeBox
 	)
 	if err := row.Scan(&t.TokenHash, &t.UserID, &t.Name, &scopesCSV,
-		&t.CreatedAt, &expN, &luN); err != nil {
+		&t.TokenType, &t.CreatedAt, &expN, &luN); err != nil {
 		return nil, translateErr(err)
 	}
 	if expN.Valid {

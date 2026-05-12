@@ -263,6 +263,42 @@ func (s *Server) toolDefinitions() []toolDef {
 				"prompt":    {Type: "string"},
 			}, []string{"entry_ids"}),
 		},
+		{
+			Name:        "kb_open_list",
+			Description: "List open work items — entries tagged `open` that an idle agent can claim and implement. Filter by `role` (matches `skill:<role>` tag) and `effort` (S/M/L). Use this when you have spare capacity and want to contribute. Returned items include parsed convention tags (effort, skills, needs, priority).",
+			InputSchema: schemaObject(map[string]schemaProp{
+				"role":   {Type: "string", Description: "Filter to entries tagged `skill:<role>`. Optional."},
+				"effort": {Type: "string", Description: "S | M | L. Optional."},
+			}, []string{}),
+		},
+		{
+			Name:        "kb_open_claim",
+			Description: "Atomically claim an entry tagged `open` for implementation. Creates a librarian_task linked to the entry, swaps `open` for `claimed:<instance_id>`, and starts the work tracker. Fails with ALREADY_EXISTS if someone beat you to it.",
+			InputSchema: schemaObject(map[string]schemaProp{
+				"entry_id":    {Type: "string"},
+				"role":        {Type: "string", Description: "Your librarian role."},
+				"instance_id": {Type: "string", Description: "Your instance_id (or a label identifying this work session)."},
+				"effort":      {Type: "string", Description: "Estimated effort: S | M | L. Optional."},
+			}, []string{"entry_id", "role", "instance_id"}),
+		},
+		{
+			Name:        "kb_open_release",
+			Description: "Reverse a claim — return the work to the pool. Use when you realise it's beyond your scope, or you got blocked. Restores `open` tag and cancels the task.",
+			InputSchema: schemaObject(map[string]schemaProp{
+				"entry_id":    {Type: "string"},
+				"instance_id": {Type: "string"},
+			}, []string{"entry_id", "instance_id"}),
+		},
+		{
+			Name:        "kb_open_merge",
+			Description: "Mark a claimed entry as merged (implementation complete). Drops `claimed:<id>`, adds `merged`, completes the task with the supplied result text. When you also created a new entry that documents the implementation, pass it as `impl_entry_id` to wire up a `resolved_by` relation automatically.",
+			InputSchema: schemaObject(map[string]schemaProp{
+				"entry_id":      {Type: "string"},
+				"instance_id":   {Type: "string"},
+				"result":        {Type: "string", Description: "Short summary of what was done; goes into librarian_tasks.result."},
+				"impl_entry_id": {Type: "string", Description: "Optional: entry that documents the implementation (PR / commit reference / design doc)."},
+			}, []string{"entry_id", "instance_id"}),
+		},
 	}
 }
 
@@ -377,6 +413,54 @@ func (s *Server) handleToolsCall(ctx context.Context, req *rpcRequest) *rpcRespo
 	case "kb_reflect":
 		path, meth = "/v1/reflect", http.MethodPost
 		body = p.Arguments
+	case "kb_open_list":
+		q := ""
+		if role, ok := p.Arguments["role"].(string); ok && role != "" {
+			q = "?role=" + role
+		}
+		if effort, ok := p.Arguments["effort"].(string); ok && effort != "" {
+			if q == "" {
+				q = "?"
+			} else {
+				q += "&"
+			}
+			q += "effort=" + effort
+		}
+		path, meth, body = "/v1/open_work"+q, http.MethodGet, nil
+	case "kb_open_claim":
+		eid, _ := p.Arguments["entry_id"].(string)
+		if eid == "" {
+			return rpcErr(req.ID, -32602, "entry_id required")
+		}
+		args := map[string]any{}
+		for _, k := range []string{"role", "instance_id", "effort"} {
+			if v, ok := p.Arguments[k]; ok {
+				args[k] = v
+			}
+		}
+		path, meth, body = "/v1/entries/"+eid+"/claim", http.MethodPost, args
+	case "kb_open_release":
+		eid, _ := p.Arguments["entry_id"].(string)
+		if eid == "" {
+			return rpcErr(req.ID, -32602, "entry_id required")
+		}
+		args := map[string]any{}
+		if v, ok := p.Arguments["instance_id"]; ok {
+			args["instance_id"] = v
+		}
+		path, meth, body = "/v1/entries/"+eid+"/release", http.MethodPost, args
+	case "kb_open_merge":
+		eid, _ := p.Arguments["entry_id"].(string)
+		if eid == "" {
+			return rpcErr(req.ID, -32602, "entry_id required")
+		}
+		args := map[string]any{}
+		for _, k := range []string{"instance_id", "result", "impl_entry_id"} {
+			if v, ok := p.Arguments[k]; ok {
+				args[k] = v
+			}
+		}
+		path, meth, body = "/v1/entries/"+eid+"/mark_merged", http.MethodPost, args
 	default:
 		return rpcErr(req.ID, -32602, "unknown tool: "+p.Name)
 	}

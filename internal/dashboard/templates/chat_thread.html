@@ -1,0 +1,73 @@
+{{define "content"}}
+<nav class="subnav">
+  <a href="/chat{{if .Token}}?token={{urlq .Token}}{{end}}">← Threads</a>
+</nav>
+{{with .ChatThread}}
+<p class="muted">
+  <span class="badge">{{.ThreadID}}</span>
+  · <span class="badge badge-status-{{.Status}}">{{.Status}}</span>
+  {{if .Intent}}· <span class="badge">{{.Intent}}</span>{{end}}
+  · opened {{.OpenedAt.Format "2006-01-02 15:04"}}
+  {{if .ClosedAt}}· closed {{.ClosedAt.Format "2006-01-02 15:04"}}{{end}}
+</p>
+<h1>{{if .Title}}{{.Title}}{{else}}<span class="muted">(no title)</span>{{end}}</h1>
+{{if .Summary}}<div class="banner">📝 {{.Summary}}</div>{{end}}
+{{end}}
+
+<div class="chat-stream">
+  {{range .ChatMessages}}
+  <div class="chat-msg chat-msg-{{.AuthorRole}}">
+    <div class="chat-meta">
+      <span class="badge chat-author-{{.AuthorRole}}">{{.AuthorRole}}</span>
+      {{if .AuthorInstanceID}}<span class="muted">{{.AuthorInstanceID}}</span>{{end}}
+      {{if .Intent}}<span class="badge">{{.Intent}}</span>{{end}}
+      <span class="muted">{{.Timestamp.Format "2006-01-02 15:04:05"}}</span>
+    </div>
+    <div class="chat-body md">{{renderContent .Content $.Token}}</div>
+  </div>
+  {{else}}
+  <div class="empty">まだ発言なし。下のフォームから話しかけてください。</div>
+  {{end}}
+</div>
+
+{{if and .ChatThread (eq .ChatThread.Status "OPEN")}}
+<form class="chat-post" method="post" action="/chat/{{.ChatThread.ThreadID}}/post{{if .Token}}?token={{urlq .Token}}{{end}}">
+  <div class="chat-post-row">
+    <label>as
+      <select name="author_role">
+        <option value="human" selected>👤 human</option>
+        <option value="coordinator">🎯 coordinator</option>
+        <option value="cataloger">🗂️ cataloger</option>
+        <option value="curator">🛡️ curator</option>
+        <option value="detective">🔍 detective</option>
+        <option value="conservator">🌲 conservator</option>
+        <option value="scout">🛰️ scout</option>
+        <option value="summarizer">✂️ summarizer</option>
+        <option value="judge">⚖️ judge</option>
+      </select>
+    </label>
+    <label>intent
+      <select name="intent">
+        <option value="">(none)</option>
+        <option value="observation">observation</option>
+        <option value="question">question</option>
+        <option value="proposal">proposal</option>
+        <option value="concern">concern</option>
+        <option value="arbitration">arbitration</option>
+        <option value="celebration">celebration</option>
+      </select>
+    </label>
+  </div>
+  <textarea name="content" rows="3" placeholder="メッセージを入力。 [[T-XXXX]] でエントリへリンクできます。" required></textarea>
+  <button type="submit">Post</button>
+</form>
+
+<details class="chat-close">
+  <summary>Close this thread</summary>
+  <form method="post" action="/chat/{{.ChatThread.ThreadID}}/close{{if .Token}}?token={{urlq .Token}}{{end}}">
+    <label>Summary <input type="text" name="summary" placeholder="閉じる理由(任意)"></label>
+    <button type="submit">Close</button>
+  </form>
+</details>
+{{end}}
+{{end}}

@@ -138,12 +138,22 @@ type EntryFilter struct {
 	Offset            int
 }
 
-// User and APIToken are managed by the admin CLI; Phase 1 has no UI for them.
+// User is the human (or service principal) behind a token. From Phase A
+// it carries OAuth identity fields; password fields are present but unset
+// until Phase B activates them.
 type User struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Role      string    `json:"role"`
-	CreatedAt time.Time `json:"created_at"`
+	ID              string     `json:"id"`
+	Name            string     `json:"name"`
+	Role            string     `json:"role"`
+	CreatedAt       time.Time  `json:"created_at"`
+	Email           string     `json:"email,omitempty"`
+	GoogleSub       string     `json:"-"`                            // never marshal — internal identity
+	AvatarURL       string     `json:"avatar_url,omitempty"`
+	LastLoginAt     *time.Time `json:"last_login_at,omitempty"`
+	EmailVerifiedAt *time.Time `json:"email_verified_at,omitempty"`
+	// password_hash deliberately omitted from the struct — never read into
+	// app memory unless the password-verification code path needs it
+	// (Phase B). Keeping it out reduces accidental leak surface.
 }
 
 type APIToken struct {
@@ -151,6 +161,7 @@ type APIToken struct {
 	UserID     string     `json:"user_id,omitempty"`
 	Name       string     `json:"name"`
 	Scopes     []string   `json:"scopes"`
+	TokenType  string     `json:"token_type"` // "api" (long-lived) | "session" (browser)
 	CreatedAt  time.Time  `json:"created_at"`
 	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`

@@ -1,0 +1,25 @@
+{{define "content"}}
+<div class="login">
+  <h1>omoikane にサインイン</h1>
+
+  {{if .LoginError}}<div class="banner">⚠️ {{.LoginError}}</div>{{end}}
+
+  {{if .GoogleEnabled}}
+  <a class="btn-google" href="/v1/auth/google/login{{if .Next}}?next={{.Next}}{{end}}">
+    <span class="g-logo">G</span> Continue with Google
+  </a>
+  {{else}}
+  <div class="empty">Google OAuth が設定されていません。
+    管理者は <code>KB_OAUTH_GOOGLE_CLIENT_ID</code> /
+    <code>KB_OAUTH_GOOGLE_CLIENT_SECRET</code> /
+    <code>KB_OAUTH_REDIRECT_BASE</code> を設定してください。</div>
+  {{end}}
+
+  <details class="muted login-token-fallback">
+    <summary>または API トークンで直接ログイン</summary>
+    <p>管理者が <code>kb-server admin-token</code> で発行したトークンを URL の <code>?token=…</code> に付けてアクセスすると、その権限でダッシュボードが見られます。エージェント・CLI 連携にも同じトークンが使えます。</p>
+  </details>
+
+  <p class="muted login-future">Phase B でメールアドレス+パスワードと社外コラボ招待が追加予定です。</p>
+</div>
+{{end}}

@@ -19,15 +19,15 @@
 </div>
 {{end}}
 
-{{if .Symptom}}<div class="field"><div class="label">Symptom</div><div class="body">{{wikiLinks .Symptom $.Token}}</div></div>{{end}}
-{{if .RootCause}}<div class="field"><div class="label">Root cause</div><div class="body">{{wikiLinks .RootCause $.Token}}</div></div>{{end}}
-{{if .Resolution}}<div class="field"><div class="label">Resolution</div><div class="body">{{wikiLinks .Resolution $.Token}}</div></div>{{end}}
-{{if .Prohibited}}<div class="field"><div class="label">Prohibited</div><div class="body">{{wikiLinks .Prohibited $.Token}}</div></div>{{end}}
-{{if .AttemptedApproaches}}<div class="field"><div class="label">Attempted approaches</div><div class="body">{{wikiLinks .AttemptedApproaches $.Token}}</div></div>{{end}}
-{{if .ObservedBehavior}}<div class="field"><div class="label">Observed behavior</div><div class="body">{{wikiLinks .ObservedBehavior $.Token}}</div></div>{{end}}
-{{if .Hypotheses}}<div class="field"><div class="label">Hypotheses</div><div class="body">{{wikiLinks .Hypotheses $.Token}}</div></div>{{end}}
+{{if .Symptom}}<div class="field"><div class="label">Symptom</div><div class="body md">{{renderContent .Symptom $.Token}}</div></div>{{end}}
+{{if .RootCause}}<div class="field"><div class="label">Root cause</div><div class="body md">{{renderContent .RootCause $.Token}}</div></div>{{end}}
+{{if .Resolution}}<div class="field"><div class="label">Resolution</div><div class="body md">{{renderContent .Resolution $.Token}}</div></div>{{end}}
+{{if .Prohibited}}<div class="field"><div class="label">Prohibited</div><div class="body md">{{renderContent .Prohibited $.Token}}</div></div>{{end}}
+{{if .AttemptedApproaches}}<div class="field"><div class="label">Attempted approaches</div><div class="body md">{{renderContent .AttemptedApproaches $.Token}}</div></div>{{end}}
+{{if .ObservedBehavior}}<div class="field"><div class="label">Observed behavior</div><div class="body md">{{renderContent .ObservedBehavior $.Token}}</div></div>{{end}}
+{{if .Hypotheses}}<div class="field"><div class="label">Hypotheses</div><div class="body md">{{renderContent .Hypotheses $.Token}}</div></div>{{end}}
 
-<div class="field"><div class="label">Body ({{.BodyFormat}})</div><div class="body">{{wikiLinks .Body $.Token}}</div></div>
+<div class="field"><div class="label">Body ({{.BodyFormat}})</div><div class="body md">{{if eq .BodyFormat "markdown"}}{{renderContent .Body $.Token}}{{else}}{{wikiLinks .Body $.Token}}{{end}}</div></div>
 
 <div class="field">
   <div class="label">Validity</div>

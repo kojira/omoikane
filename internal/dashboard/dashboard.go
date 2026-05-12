@@ -27,7 +27,15 @@ type Handler struct {
 	Store *store.Store
 	Open  bool
 	pages map[string]*template.Template
+
+	// Phase A: whether the server has Google OAuth wired up. Drives the
+	// /login page's button visibility.
+	GoogleEnabled bool
 }
+
+// sessionCookieName must match api.sessionCookieName. Kept duplicated
+// (string constant) rather than imported to avoid a circular dep.
+const sessionCookieName = "kb_session"
 
 // New parses one *template.Template *per page* — html/template has no
 // per-file scoping, so a single ParseFS over all pages would let the last
@@ -41,15 +49,20 @@ func New(s *store.Store, open bool) (*Handler, error) {
 // actually hit.
 func newFromFS(s *store.Store, open bool, fsys fs.FS) (*Handler, error) {
 	funcs := template.FuncMap{
-		"trunc":     trunc,
-		"urlq":      url.QueryEscape,
-		"deref":     deref,
-		"wikiLinks": wikiLinks,
+		"trunc":       trunc,
+		"urlq":        url.QueryEscape,
+		"deref":       deref,
+		"wikiLinks":   wikiLinks,
+		"chatContent": chatContent,
+		// markdown + wiki + mentions in one shot; preferred renderer for
+		// entry bodies and chat messages
+		"renderContent": renderContent,
 	}
 	pages := map[string]*template.Template{}
 	for _, name := range []string{"home", "project", "entry", "entry_history", "search",
 		"review_queue", "clusters", "cluster", "situations", "situation",
-		"browse", "browse_node", "index"} {
+		"browse", "browse_node", "index",
+		"chat_threads", "chat_thread", "login"} {
 		t, err := template.New(name).Funcs(funcs).ParseFS(fsys,
 			"templates/layout.html",
 			"templates/"+name+".html")
@@ -62,7 +75,16 @@ func newFromFS(s *store.Store, open bool, fsys fs.FS) (*Handler, error) {
 }
 
 func (h *Handler) Mount(r chi.Router) {
+	// Public: /login is the unauthenticated landing for browsers without
+	// a token yet. The OAuth callback lives under /v1/auth/google/... in
+	// the API package.
+	r.Get("/login", h.loginPage)
+
 	r.Group(func(r chi.Router) {
+		// Cookie → bearer must run before query-token promotion so a
+		// freshly-issued session cookie takes precedence over a stale
+		// ?token= bookmark.
+		r.Use(auth.SessionCookieToBearer(sessionCookieName))
 		r.Use(auth.AllowQueryTokenForGET)
 		if !h.Open {
 			mw := &auth.Middleware{S: h.Store}
@@ -82,7 +104,23 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Get("/browse", h.browsePage)
 		r.Get("/browse/{id}", h.browseNodePage)
 		r.Get("/index", h.indexPage)
+		r.Get("/chat", h.chatThreadsPage)
+		r.Get("/chat/{id}", h.chatThreadPage)
 		r.Get("/static/style.css", h.css)
+	})
+	// Chat write endpoints — humans posting from the browser. Form
+	// submissions can't set Authorization headers, so we accept the
+	// token via `?token=` for POST too (see auth.AllowQueryTokenAny).
+	r.Group(func(r chi.Router) {
+		r.Use(auth.AllowQueryTokenAny)
+		if !h.Open {
+			mw := &auth.Middleware{S: h.Store}
+			r.Use(mw.Authenticate)
+			r.Use(auth.RequireScope("write"))
+		}
+		r.Post("/chat/new", h.chatThreadCreate)
+		r.Post("/chat/{id}/post", h.chatThreadPostMessage)
+		r.Post("/chat/{id}/close", h.chatThreadClose)
 	})
 }
 
@@ -119,6 +157,16 @@ type pageCtx struct {
 	BrowseEntries  []*store.Entry
 	IndexBuckets   []*store.IndexBucket
 	GroupBy        string
+
+	// Phase 5 — chat
+	ChatThreads  []*store.ChatThread
+	ChatThread   *store.ChatThread
+	ChatMessages []*store.ChatMessage
+
+	// Phase A — login page
+	GoogleEnabled bool
+	Next          string
+	LoginError    string
 }
 
 func (h *Handler) renderCtx(r *http.Request) pageCtx {
@@ -411,6 +459,148 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 	h.render(w, "search", pc)
 }
 
+// ----------------------------------------------------------------------
+// Phase A — login page (no auth required)
+// ----------------------------------------------------------------------
+
+func (h *Handler) loginPage(w http.ResponseWriter, r *http.Request) {
+	pc := h.renderCtx(r)
+	pc.Title = "omoikane — sign in"
+	pc.GoogleEnabled = h.GoogleEnabled
+	if next := r.URL.Query().Get("next"); next != "" && strings.HasPrefix(next, "/") && !strings.HasPrefix(next, "//") {
+		pc.Next = next
+	}
+	if e := r.URL.Query().Get("error"); e != "" {
+		pc.LoginError = e
+	}
+	h.render(w, "login", pc)
+}
+
+// ----------------------------------------------------------------------
+// Phase 5 — librarian chat room (read + write from the dashboard)
+// ----------------------------------------------------------------------
+
+func (h *Handler) chatThreadsPage(w http.ResponseWriter, r *http.Request) {
+	status := r.URL.Query().Get("status") // "" = all
+	threads, err := h.Store.ListThreads(r.Context(), status, 100)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	pc := h.renderCtx(r)
+	pc.Title = "omoikane — chat"
+	pc.ChatThreads = threads
+	h.render(w, "chat_threads", pc)
+}
+
+func (h *Handler) chatThreadPage(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	threads, _ := h.Store.ListThreads(r.Context(), "", 500)
+	var thread *store.ChatThread
+	for _, t := range threads {
+		if t.ThreadID == id {
+			thread = t
+			break
+		}
+	}
+	if thread == nil {
+		http.NotFound(w, r)
+		return
+	}
+	msgs, err := h.Store.ListChatMessages(r.Context(), id, 500)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	pc := h.renderCtx(r)
+	pc.Title = "omoikane — " + firstNonEmpty(thread.Title, thread.ThreadID)
+	pc.ChatThread = thread
+	pc.ChatMessages = msgs
+	h.render(w, "chat_thread", pc)
+}
+
+// chatThreadCreate accepts a form POST and redirects to the new thread.
+// Fields: title, intent.
+func (h *Handler) chatThreadCreate(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	id, err := h.Store.OpenThread(r.Context(), &store.ChatThread{
+		Title:  strings.TrimSpace(r.FormValue("title")),
+		Intent: strings.TrimSpace(r.FormValue("intent")),
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	dest := "/chat/" + id
+	if tok := r.URL.Query().Get("token"); tok != "" {
+		dest += "?token=" + url.QueryEscape(tok)
+	}
+	http.Redirect(w, r, dest, http.StatusSeeOther)
+}
+
+// chatThreadPostMessage accepts a form POST from the thread page.
+// Fields: author_role (defaults "human"), content, intent.
+func (h *Handler) chatThreadPostMessage(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	role := strings.TrimSpace(r.FormValue("author_role"))
+	if role == "" {
+		role = "human"
+	}
+	content := strings.TrimSpace(r.FormValue("content"))
+	if content == "" {
+		http.Error(w, "content required", http.StatusBadRequest)
+		return
+	}
+	_, err := h.Store.PostChatMessage(r.Context(), &store.ChatMessage{
+		ThreadID:   id,
+		AuthorRole: role,
+		Intent:     strings.TrimSpace(r.FormValue("intent")),
+		Content:    content,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	dest := "/chat/" + id
+	if tok := r.URL.Query().Get("token"); tok != "" {
+		dest += "?token=" + url.QueryEscape(tok)
+	}
+	http.Redirect(w, r, dest, http.StatusSeeOther)
+}
+
+func (h *Handler) chatThreadClose(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	if err := h.Store.CloseThread(r.Context(), id, strings.TrimSpace(r.FormValue("summary"))); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	dest := "/chat/" + id
+	if tok := r.URL.Query().Get("token"); tok != "" {
+		dest += "?token=" + url.QueryEscape(tok)
+	}
+	http.Redirect(w, r, dest, http.StatusSeeOther)
+}
+
+func firstNonEmpty(ss ...string) string {
+	for _, s := range ss {
+		if s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
 func (h *Handler) css(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/css; charset=utf-8")
 	_, _ = w.Write([]byte(stylesheet))
@@ -449,6 +639,12 @@ func deref(p *float64) float64 {
 // and base32-ish alphanumerics.
 var wikiLinkRE = regexp.MustCompile(`\[\[((?:T|D|X|L|I|M|F|E|H|SIT|CL|CASE|SM)-[A-Za-z0-9]+)(?:\|([^\]]+))?\]\]`)
 
+// mentionRenderRE mirrors store.mentionRE — kept duplicated rather than
+// imported so the dashboard package doesn't form a circular dep with
+// store's regex internals. Roles must stay in sync.
+var mentionRenderRE = regexp.MustCompile(
+	`(^|[^A-Za-z0-9_])@(coordinator|cataloger|curator|detective|conservator|scout|summarizer|judge|human)\b`)
+
 // wikiLinks renders `[[T-XXXX]]` references inside plain text fields as
 // HTML anchors to the corresponding entry page. Tokens that don't match
 // the entry-ID shape are left untouched. The output is HTML-escaped
@@ -469,6 +665,28 @@ func wikiLinks(text, token string) template.HTML {
 		}
 		href := wikiHref(id, token)
 		return `<a href="` + href + `" class="wiki">` + template.HTMLEscapeString(label) + `</a>`
+	})
+	return template.HTML(out)
+}
+
+// chatContent renders a chat-message body: HTML-escapes it, links
+// `[[T-XXXX]]` references, and decorates `@<role>` mentions with a
+// per-role span. Returns template.HTML so html/template won't
+// re-escape the output.
+func chatContent(text, token string) template.HTML {
+	// Reuse wikiLinks for escaping + wiki-link substitution.
+	out := string(wikiLinks(text, token))
+	// Now decorate @mentions. We operate on already-escaped HTML; the
+	// regex only matches role-shaped tokens at word boundaries, so it
+	// will not accidentally split a wikilink's `<a class="wiki" …>`
+	// (which contains no '@' at all).
+	out = mentionRenderRE.ReplaceAllStringFunc(out, func(match string) string {
+		groups := mentionRenderRE.FindStringSubmatch(match)
+		if len(groups) < 3 {
+			return match
+		}
+		prefix, role := groups[1], groups[2]
+		return prefix + `<span class="mention mention-` + role + `">@` + role + `</span>`
 	})
 	return template.HTML(out)
 }

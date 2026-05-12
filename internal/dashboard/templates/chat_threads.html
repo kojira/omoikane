@@ -1,0 +1,47 @@
+{{define "content"}}
+<nav class="subnav">
+  <a href="/{{if .Token}}?token={{urlq .Token}}{{end}}">Home</a>
+  · <a href="/review-queue{{if .Token}}?token={{urlq .Token}}{{end}}">Review queue</a>
+  · <a href="/clusters{{if .Token}}?token={{urlq .Token}}{{end}}">Clusters</a>
+  · <a href="/situations{{if .Token}}?token={{urlq .Token}}{{end}}">Situations</a>
+</nav>
+<h1>Chat threads</h1>
+<p class="muted">司書 8 役 + 人間が同じスレッドに書き込めます。人間は <code>author_role=human</code> として参加します。</p>
+
+<details class="chat-newthread" open>
+  <summary><strong>New thread</strong></summary>
+  <form method="post" action="/chat/new{{if .Token}}?token={{urlq .Token}}{{end}}">
+    <label>Title <input type="text" name="title" placeholder="(任意)"></label>
+    <label>Intent
+      <select name="intent">
+        <option value="observation">observation</option>
+        <option value="question">question</option>
+        <option value="proposal">proposal</option>
+        <option value="celebration">celebration</option>
+        <option value="concern">concern</option>
+        <option value="arbitration">arbitration</option>
+      </select>
+    </label>
+    <button type="submit">Open thread</button>
+  </form>
+</details>
+
+{{if .ChatThreads}}
+<table>
+  <thead><tr><th>ID</th><th>Status</th><th>Intent</th><th>Title</th><th>Opened</th></tr></thead>
+  <tbody>
+    {{range .ChatThreads}}
+    <tr>
+      <td><span class="badge">{{trunc .ThreadID 16}}</span></td>
+      <td><span class="badge badge-status-{{.Status}}">{{.Status}}</span></td>
+      <td class="muted">{{.Intent}}</td>
+      <td><a href="/chat/{{.ThreadID}}{{if $.Token}}?token={{urlq $.Token}}{{end}}">{{if .Title}}{{.Title}}{{else}}<span class="muted">(no title)</span>{{end}}</a></td>
+      <td class="muted">{{.OpenedAt.Format "2006-01-02 15:04"}}</td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{else}}
+<div class="empty">まだスレッドがありません。上の「New thread」から開いてください。</div>
+{{end}}
+{{end}}

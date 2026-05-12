@@ -214,6 +214,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		err = CmdIndex(args[1:], stdout)
 	case "reflect":
 		err = CmdReflect(args[1:], stdout)
+	case "open":
+		err = CmdOpen(args[1:], stdout)
 	default:
 		fmt.Fprintln(stderr, "unknown command:", args[0])
 		Usage(stderr)
@@ -283,7 +285,12 @@ usage:
   kb browse delete <node-id>
 
   kb index   [--group-by tag|recent|hierarchy] [--project <id>]
-  kb reflect <entry-id>... [--prompt <text>]`)
+  kb reflect <entry-id>... [--prompt <text>]
+
+  kb open list     [--role <role>] [--effort S|M|L]
+  kb open claim    --entry <id> --role <role> --instance <id> [--effort <S|M|L>]
+  kb open release  --entry <id> --instance <id>
+  kb open merge    --entry <id> --instance <id> [--result <text>] [--impl <id>]`)
 }
 
 // ---- config ----
