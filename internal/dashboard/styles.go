@@ -187,4 +187,15 @@ table.claim-summary { width: 100%; margin: 1rem 0; }
 table.claim-summary th { background: transparent; text-transform: none; letter-spacing: 0; font-size: 0.85rem; color: var(--muted); width: 30%; }
 .login form button.btn-google { padding: 0.7rem 1.4rem; font-weight: 600; cursor: pointer; background: #2a6fdb; color: #fff; border: none; }
 .login form button.btn-google:hover { background: #1a5fcb; }
+.banner-success { background: #e6f4e6; border-color: #b8dab8; }
+.banner-success p { margin: 0.3rem 0; }
+input.copy-target {
+  width: 100%; padding: 0.6rem 0.8rem; font: 1.05rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  border: 1px solid var(--border); border-radius: 4px; background: #fff;
+  margin: 0.4rem 0; cursor: text;
+}
+input.copy-target:focus { outline: 2px solid var(--accent); }
+form button { padding: 0.45rem 1rem; font: inherit; cursor: pointer; background: var(--accent); color: #fff; border: none; border-radius: 4px; }
+form button:hover { background: #1a5fcb; }
+form input[type=text] { padding: 0.4rem 0.6rem; border: 1px solid var(--border); border-radius: 4px; font: inherit; min-width: 320px; }
 `

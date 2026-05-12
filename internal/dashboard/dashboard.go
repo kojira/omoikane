@@ -62,7 +62,7 @@ func newFromFS(s *store.Store, open bool, fsys fs.FS) (*Handler, error) {
 	for _, name := range []string{"home", "project", "entry", "entry_history", "search",
 		"review_queue", "clusters", "cluster", "situations", "situation",
 		"browse", "browse_node", "index",
-		"chat_threads", "chat_thread", "login", "claim"} {
+		"chat_threads", "chat_thread", "login", "claim", "agents"} {
 		t, err := template.New(name).Funcs(funcs).ParseFS(fsys,
 			"templates/layout.html",
 			"templates/"+name+".html")
@@ -118,12 +118,14 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Get("/index", h.indexPage)
 		r.Get("/chat", h.chatThreadsPage)
 		r.Get("/chat/{id}", h.chatThreadPage)
+		r.Get("/agents", h.agentsPage)
 		r.Get("/static/style.css", h.css)
 	})
-	// Chat write endpoints — humans posting from the browser. Form
-	// submissions can't set Authorization headers, so we accept the
-	// token via `?token=` for POST too (see auth.AllowQueryTokenAny).
+	// Write surfaces for the dashboard (chat + agents). Form submissions
+	// can't set Authorization headers, so we accept the token via
+	// `?token=` AND via the session cookie (see auth.AllowQueryTokenAny).
 	r.Group(func(r chi.Router) {
+		r.Use(auth.SessionCookieToBearer(sessionCookieName))
 		r.Use(auth.AllowQueryTokenAny)
 		if !h.Open {
 			mw := &auth.Middleware{S: h.Store}
@@ -133,6 +135,7 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Post("/chat/new", h.chatThreadCreate)
 		r.Post("/chat/{id}/post", h.chatThreadPostMessage)
 		r.Post("/chat/{id}/close", h.chatThreadClose)
+		r.Post("/agents/issue", h.agentsIssue)
 	})
 }
 
@@ -187,6 +190,14 @@ type pageCtx struct {
 	ClaimedAt      *time.Time
 	ClaimedByMe    bool
 	ClaimError     string
+
+	// Agents page
+	Me              *store.User
+	NewInviteCode   string
+	AgentsPageError string
+	Invitations     []*store.AgentInvitation
+	MyAgents        []*store.User
+	BaseURL         string
 }
 
 func (h *Handler) renderCtx(r *http.Request) pageCtx {

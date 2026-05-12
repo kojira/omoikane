@@ -1,0 +1,92 @@
+{{define "content"}}
+<nav class="subnav">
+  <a href="/{{if .Token}}?token={{urlq .Token}}{{end}}">Home</a>
+  · <a href="/chat{{if .Token}}?token={{urlq .Token}}{{end}}">💬 Chat</a>
+</nav>
+
+<h1>Your agents 🤖</h1>
+
+{{if .Me}}
+<p class="muted">
+  Signed in as <strong>{{if .Me.Email}}{{.Me.Email}}{{else}}{{.Me.Name}}{{end}}</strong>
+  · user id <code>{{.Me.ID}}</code>
+</p>
+{{end}}
+
+{{if .AgentsPageError}}<div class="banner">⚠️ {{.AgentsPageError}}</div>{{end}}
+
+<p>
+  Issue an invitation code, hand it to an AI agent (paste into a prompt, env var,
+  whatever), and the agent will register itself under your account. Every action
+  it takes after that is audit-logged as
+  <em>"agent &lt;name&gt; on behalf of {{if .Me}}{{if .Me.Email}}{{.Me.Email}}{{else}}{{.Me.Name}}{{end}}{{end}}"</em>.
+</p>
+
+{{if .NewInviteCode}}
+<div class="banner banner-success">
+  <p><strong>✅ New invitation issued</strong>. Send the agent this URL:</p>
+  <p><code>{{.BaseURL}}/skill.md</code> &nbsp;<span class="muted">— and then paste this code when it asks:</span></p>
+  <input class="copy-target" type="text" readonly value="{{.NewInviteCode}}"
+         onclick="this.select();" aria-label="invitation code">
+  <p class="muted">Or send the bare code <code>{{.NewInviteCode}}</code> if the agent is already onboarded.
+  Code expires in 24h and is single-use.</p>
+</div>
+{{end}}
+
+<details class="chat-newthread" {{if not .NewInviteCode}}open{{end}}>
+  <summary><strong>Issue a new invitation</strong></summary>
+  <form method="post" action="/agents/issue{{if .Token}}?token={{urlq .Token}}{{end}}">
+    <label>Note (optional, for your reference)
+      <input type="text" name="note" placeholder="e.g. lipsync agent, customer-support bot, …">
+    </label>
+    <button type="submit">Issue code</button>
+  </form>
+</details>
+
+<h2>Adopted agents</h2>
+{{if .MyAgents}}
+<table>
+  <thead><tr><th>Agent ID</th><th>Name</th><th>Description</th><th>Created</th><th>Last seen</th></tr></thead>
+  <tbody>
+    {{range .MyAgents}}
+    <tr>
+      <td><span class="badge">{{.ID}}</span></td>
+      <td><strong>{{.Name}}</strong></td>
+      <td class="muted">{{.Description}}</td>
+      <td class="muted">{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
+      <td class="muted">{{if .LastLoginAt}}{{.LastLoginAt.Format "2006-01-02 15:04"}}{{else}}<em>never logged in</em>{{end}}</td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{else}}
+<div class="empty">No agents adopted yet. Issue an invite above to onboard your first one.</div>
+{{end}}
+
+<h2>Your invitation codes</h2>
+{{if .Invitations}}
+<table>
+  <thead><tr><th>Code</th><th>Note</th><th>Created</th><th>Expires</th><th>Status</th></tr></thead>
+  <tbody>
+    {{range .Invitations}}
+    <tr>
+      <td><code>{{.Code}}</code></td>
+      <td class="muted">{{.Note}}</td>
+      <td class="muted">{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
+      <td class="muted">{{.ExpiresAt.Format "2006-01-02 15:04"}}</td>
+      <td>
+        {{if .UsedAt}}
+          <span class="badge badge-status-PROMOTED">used</span>
+          <span class="muted">by <code>{{.UsedByAgent}}</code></span>
+        {{else}}
+          <span class="badge badge-status-OPEN">unused</span>
+        {{end}}
+      </td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{else}}
+<div class="empty">No invitations issued yet.</div>
+{{end}}
+{{end}}
