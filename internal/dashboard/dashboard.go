@@ -105,6 +105,11 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Use(auth.AllowQueryTokenForGET)
 		if !h.Open {
 			mw := &auth.Middleware{S: h.Store}
+			// Order: browserAuthRedirect outer, Authenticate inner.
+			// When Authenticate writes a 401, the redirect wrapper
+			// catches it and turns it into /login?next=… for browsers.
+			// API clients (no text/html in Accept) still see JSON 401.
+			r.Use(browserAuthRedirect)
 			r.Use(mw.Authenticate)
 			r.Use(auth.RequireScope("read"))
 		}

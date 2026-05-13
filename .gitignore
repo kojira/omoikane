@@ -13,3 +13,7 @@ secret/
 data/
 *.env
 client_secret_*.json
+
+# Claude Code local settings — per-machine, may contain IPs / hostnames.
+# A team-shared `.claude/settings.json` is fine; the .local.json isn't.
+.claude/settings.local.json
