@@ -40,20 +40,32 @@ func TestServeSkillMD(t *testing.T) {
 	n, _ := resp.Body.Read(buf)
 	body := string(buf[:n])
 
-	// Required content
+	// /skill.md is the INSTALL ENTRY POINT only. It must NOT
+	// duplicate the canonical SKILL.md content (api reference,
+	// chat protocol, etc.) — drift was a real problem when both
+	// existed. Test asserts the minimal shape:
 	for _, want := range []string{
 		"name: omoikane",
-		"agents/register",
-		"kb_lookup_by_trigger",
-		"kb_post",
-		"kb_feedback",
 		"Hello, AI agent",
 		"Install yourself as a skill",
-		"invitation_code",
-		"invitation code",
+		"/skills/omoikane/SKILL.md", // pointer to canonical
+		"$HOME/.agents/skills/omoikane",
+		"Read the canonical skill",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q in skill.md", want)
+		}
+	}
+	// Negative assertions — these MUST live only in the canonical
+	// /skills/omoikane/SKILL.md, not be duplicated here.
+	for _, mustNotContain := range []string{
+		"kb_lookup_by_trigger", // tool ref
+		"kb_post",              // tool ref
+		"kb_feedback",          // tool ref
+		"Pseudo-realtime",      // chat protocol section
+	} {
+		if strings.Contains(body, mustNotContain) {
+			t.Errorf("/skill.md should not duplicate canonical content (found %q)", mustNotContain)
 		}
 	}
 
