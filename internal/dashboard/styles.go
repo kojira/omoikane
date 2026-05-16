@@ -272,4 +272,44 @@ form input[type=text] { padding: 0.4rem 0.6rem; border: 1px solid var(--border);
 }
 .profile-edit input[type=text] { width: 100%; min-width: 100%; }
 .profile-edit button { align-self: flex-start; }
+
+/* Attachment unfurl — rendered inline in entry body / chat message. */
+.attachment {
+  display: block;
+  margin: 1rem 0;
+}
+figure.attachment {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.6rem;
+  margin: 1rem 0;
+}
+figure.attachment img,
+figure.attachment video,
+figure.attachment audio {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  margin: 0 auto;
+}
+figure.attachment figcaption {
+  margin-top: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-align: center;
+}
+a.attachment-file {
+  display: inline-block;
+  padding: 0.4rem 0.8rem;
+  background: var(--badge-bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  text-decoration: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9rem;
+}
+a.attachment-file:hover { background: var(--hover); }
 `

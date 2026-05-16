@@ -54,9 +54,14 @@ func newFromFS(s *store.Store, open bool, fsys fs.FS) (*Handler, error) {
 		"deref":       deref,
 		"wikiLinks":   wikiLinks,
 		"chatContent": chatContent,
-		// markdown + wiki + mentions in one shot; preferred renderer for
-		// entry bodies and chat messages
-		"renderContent": renderContent,
+		// markdown + wiki + mentions + attachment unfurl in one shot;
+		// preferred renderer for entry bodies and chat messages.
+		// Captures `s` so attachment refs can be resolved at render
+		// time without threading the store through every template
+		// invocation.
+		"renderContent": func(text, token string) template.HTML {
+			return renderContent(text, token, s)
+		},
 	}
 	pages := map[string]*template.Template{}
 	for _, name := range []string{"home", "project", "entry", "entry_history", "search",
