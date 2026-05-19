@@ -10,22 +10,30 @@ import (
 	"testing"
 )
 
-// writeSkill builds a minimal skill directory in a temp dir and returns
-// the path.
+// minimalSkill returns a 3-file bundle in a temp dir whose SKILL.md
+// frontmatter declares the given role and a 1-second heartbeat (so
+// tests don't sleep). The body of AGENTS.md / PERSONALITY.md is
+// irrelevant to the runner — it's consumed by the agent runtime, not
+// the harness — so we just write placeholders.
 func writeSkill(t *testing.T, role string) string {
 	t.Helper()
 	dir := t.TempDir()
+	skill := "---\n" +
+		"name: omoikane-" + role + "\n" +
+		"description: test\n" +
+		"operational:\n" +
+		"  heartbeat_interval_seconds: 1\n" +
+		"  cooldown_between_actions_seconds: 1\n" +
+		"  daily_token_ceiling: 1000\n" +
+		"  phase: 5\n" +
+		"prohibitions:\n" +
+		"  - test prohibition\n" +
+		"---\n" +
+		"# omoikane-" + role + " test skill body\n"
 	files := map[string]string{
-		"SKILL.md":               "skill",
-		"role_definition.md":     "role",
-		"personality.yaml":       "id: " + role + "\ndata_gathering:\n  heartbeat_interval_seconds: 1\nposting_behavior:\n  daily_token_ceiling: 1000\n",
-		"operations.yaml":        "read: []\nwrite: []",
-		"decision_protocols.md":  "decisions",
-		"trigger_conditions.yaml": "heartbeat:\n  enabled: true\n",
-		"communication_style.md": "tone",
-		"meta_protocol.md":       "meta",
-		"error_handling.md":      "err",
-		"self_check.md":          "self",
+		"SKILL.md":       skill,
+		"AGENTS.md":      "# " + role + " agent role (test placeholder)\n",
+		"PERSONALITY.md": "# " + role + " persona (test placeholder)\n",
 	}
 	for f, c := range files {
 		if err := os.WriteFile(filepath.Join(dir, f), []byte(c), 0o644); err != nil {
@@ -47,43 +55,78 @@ func TestLoadSkill(t *testing.T) {
 	if skill.HeartbeatInterval.Seconds() != 1 {
 		t.Fatalf("interval=%s", skill.HeartbeatInterval)
 	}
-}
-
-func TestLoadSkillMissingFile(t *testing.T) {
-	dir := writeSkill(t, "detective")
-	_ = os.Remove(filepath.Join(dir, "self_check.md"))
-	if _, err := LoadSkill(dir); err == nil {
-		t.Fatal("expected error on missing file")
+	if skill.DailyTokenCeiling != 1000 {
+		t.Fatalf("ceiling=%d", skill.DailyTokenCeiling)
+	}
+	if skill.Phase != 5 {
+		t.Fatalf("phase=%d", skill.Phase)
+	}
+	if len(skill.Prohibitions) != 1 {
+		t.Fatalf("prohibitions=%v", skill.Prohibitions)
 	}
 }
 
-func TestLoadSkillEmptyID(t *testing.T) {
+// A missing required file (e.g. AGENTS.md) must fail loudly — silent
+// degradation is exactly the kind of half-loaded librarian we want to
+// reject at startup.
+func TestLoadSkillMissingFile(t *testing.T) {
 	dir := writeSkill(t, "detective")
-	_ = os.WriteFile(filepath.Join(dir, "personality.yaml"),
-		[]byte("data_gathering:\n  heartbeat_interval_seconds: 1\n"), 0o644)
+	_ = os.Remove(filepath.Join(dir, "AGENTS.md"))
 	if _, err := LoadSkill(dir); err == nil {
-		t.Fatal("expected empty-id error")
+		t.Fatal("expected error on missing AGENTS.md")
+	}
+}
+
+func TestLoadSkillMissingPersonality(t *testing.T) {
+	dir := writeSkill(t, "detective")
+	_ = os.Remove(filepath.Join(dir, "PERSONALITY.md"))
+	if _, err := LoadSkill(dir); err == nil {
+		t.Fatal("expected error on missing PERSONALITY.md")
+	}
+}
+
+// SKILL.md without `---` frontmatter is rejected — operational params
+// live there and have nowhere else to come from.
+func TestLoadSkillNoFrontmatter(t *testing.T) {
+	dir := writeSkill(t, "detective")
+	_ = os.WriteFile(filepath.Join(dir, "SKILL.md"),
+		[]byte("# skill without frontmatter\n"), 0o644)
+	if _, err := LoadSkill(dir); err == nil {
+		t.Fatal("expected error on missing frontmatter")
 	}
 }
 
 func TestLoadSkillBadYAML(t *testing.T) {
 	dir := writeSkill(t, "detective")
-	_ = os.WriteFile(filepath.Join(dir, "personality.yaml"), []byte("not: : valid: yaml: ["), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "SKILL.md"),
+		[]byte("---\nnot: : valid: yaml: [\n---\n"), 0o644)
 	if _, err := LoadSkill(dir); err == nil {
 		t.Fatal("expected yaml error")
 	}
 }
 
+// A SKILL.md with empty operational.heartbeat_interval_seconds must
+// default to 10 minutes — agents that forget the field don't get
+// pathological tight loops.
 func TestLoadSkillDefaultInterval(t *testing.T) {
 	dir := writeSkill(t, "detective")
-	_ = os.WriteFile(filepath.Join(dir, "personality.yaml"),
-		[]byte("id: detective\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "SKILL.md"),
+		[]byte("---\nname: omoikane-detective\n---\nbody\n"), 0o644)
 	s, err := LoadSkill(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if s.HeartbeatInterval.Minutes() != 10 {
 		t.Fatalf("expected 10m default, got %s", s.HeartbeatInterval)
+	}
+}
+
+func TestLoadSkillEmptyName(t *testing.T) {
+	dir := writeSkill(t, "detective")
+	_ = os.WriteFile(filepath.Join(dir, "SKILL.md"),
+		[]byte("---\noperational:\n  heartbeat_interval_seconds: 1\n---\n"), 0o644)
+	if _, err := LoadSkill(dir); err == nil {
+		t.Fatal("expected empty-name error")
 	}
 }
 
@@ -127,10 +170,8 @@ func TestRunHappyPath(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("code=%d stderr=%s", code, stderr.String())
 	}
-	// We expect: register, optional chat, heartbeat (the optional chat
-	// is best-effort and might post before heartbeat).
 	want := map[string]bool{
-		"POST /v1/librarian/instances":                        true,
+		"POST /v1/librarian/instances":                         true,
 		"POST /v1/librarian/instances/detective-stub/heartbeat": true,
 	}
 	for _, h := range *hits {

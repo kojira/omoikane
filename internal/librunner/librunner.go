@@ -39,59 +39,114 @@ var nowFn = time.Now
 // the skill files remain on disk for the agent runtime to consume
 // directly.
 type SkillBundle struct {
-	Role               string
-	SkillPath          string
-	HeartbeatInterval  time.Duration
-	DailyTokenCeiling  int
-	Prohibitions       []string
+	Role              string
+	SkillPath         string
+	HeartbeatInterval time.Duration
+	CooldownInterval  time.Duration
+	DailyTokenCeiling int
+	Phase             int
+	Prohibitions      []string
 }
 
-// Personality is the subset of personality.yaml the runner needs.
-type Personality struct {
-	ID               string `yaml:"id"`
-	DataGathering    struct {
-		HeartbeatIntervalSeconds int `yaml:"heartbeat_interval_seconds"`
-	} `yaml:"data_gathering"`
-	PostingBehavior struct {
-		DailyTokenCeiling int `yaml:"daily_token_ceiling"`
-	} `yaml:"posting_behavior"`
+// skillFrontmatter is the subset of SKILL.md frontmatter the runner
+// parses. The agent runtime (Claude Code / pi-agent / etc.) consumes the
+// rest of the file directly; the runner only needs the operational
+// params to schedule heartbeats and enforce budget ceilings.
+type skillFrontmatter struct {
+	Name        string   `yaml:"name"`
+	Description string   `yaml:"description"`
+	Operational struct {
+		HeartbeatIntervalSeconds       int `yaml:"heartbeat_interval_seconds"`
+		CooldownBetweenActionsSeconds  int `yaml:"cooldown_between_actions_seconds"`
+		DailyTokenCeiling              int `yaml:"daily_token_ceiling"`
+		Phase                          int `yaml:"phase"`
+	} `yaml:"operational"`
+	Prohibitions []string `yaml:"prohibitions"`
 }
 
-// LoadSkill reads a skill directory. Returns ErrInvalidBundle when any
-// mandated file is missing — we want noisy failures rather than a
-// silently degraded runner.
-func LoadSkill(dir string) (*SkillBundle, error) {
-	required := []string{
-		"SKILL.md", "role_definition.md", "personality.yaml",
-		"operations.yaml", "decision_protocols.md",
-		"trigger_conditions.yaml", "communication_style.md",
-		"meta_protocol.md", "error_handling.md", "self_check.md",
+// parseFrontmatter extracts the YAML block delimited by the leading `---`
+// and the next `---` of a markdown file. Returns ErrInvalidBundle if the
+// file does not begin with `---`.
+func parseFrontmatter(path string) (*skillFrontmatter, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
 	}
+	// Normalise line endings minimally.
+	text := strings.ReplaceAll(string(raw), "\r\n", "\n")
+	// Expect first line to be exactly "---".
+	const marker = "---\n"
+	if !strings.HasPrefix(text, marker) {
+		return nil, fmt.Errorf("frontmatter missing: %s does not start with '---'", path)
+	}
+	body := text[len(marker):]
+	end := strings.Index(body, "\n---")
+	if end == -1 {
+		return nil, fmt.Errorf("frontmatter not terminated in %s", path)
+	}
+	yamlBlock := body[:end]
+	var fm skillFrontmatter
+	if err := yaml.Unmarshal([]byte(yamlBlock), &fm); err != nil {
+		return nil, fmt.Errorf("frontmatter parse: %w", err)
+	}
+	return &fm, nil
+}
+
+// roleFromName extracts the bare role id from a frontmatter `name` of
+// the form "omoikane-<role>". Falls back to the raw name if no prefix.
+func roleFromName(name string) string {
+	const prefix = "omoikane-"
+	if strings.HasPrefix(name, prefix) {
+		return name[len(prefix):]
+	}
+	return name
+}
+
+// LoadSkill reads a skill directory. Returns an error when any required
+// file is missing or malformed — we want noisy failures rather than a
+// silently degraded runner.
+//
+// New layout (migration 016 era): only 3 files are required —
+//   SKILL.md (with frontmatter that carries operational params)
+//   AGENTS.md
+//   PERSONALITY.md
+// The legacy 10-file layout (role_definition.md + personality.yaml + …)
+// is no longer accepted; per-role bundles have been migrated.
+func LoadSkill(dir string) (*SkillBundle, error) {
+	required := []string{"SKILL.md", "AGENTS.md", "PERSONALITY.md"}
 	for _, f := range required {
 		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
 			return nil, fmt.Errorf("missing %s: %w", f, err)
 		}
 	}
-	p := Personality{}
-	raw, err := os.ReadFile(filepath.Join(dir, "personality.yaml"))
+	fm, err := parseFrontmatter(filepath.Join(dir, "SKILL.md"))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("SKILL.md: %w", err)
 	}
-	if err := yaml.Unmarshal(raw, &p); err != nil {
-		return nil, fmt.Errorf("personality.yaml: %w", err)
+	role := roleFromName(fm.Name)
+	if role == "" {
+		return nil, fmt.Errorf("SKILL.md: name is empty")
 	}
-	if p.ID == "" {
-		return nil, fmt.Errorf("personality.yaml: id is empty")
-	}
-	interval := time.Duration(p.DataGathering.HeartbeatIntervalSeconds) * time.Second
+	interval := time.Duration(fm.Operational.HeartbeatIntervalSeconds) * time.Second
 	if interval <= 0 {
 		interval = 10 * time.Minute
 	}
+	cooldown := time.Duration(fm.Operational.CooldownBetweenActionsSeconds) * time.Second
+	if cooldown <= 0 {
+		cooldown = 60 * time.Second
+	}
+	phase := fm.Operational.Phase
+	if phase == 0 {
+		phase = 5
+	}
 	return &SkillBundle{
-		Role:              p.ID,
+		Role:              role,
 		SkillPath:         dir,
 		HeartbeatInterval: interval,
-		DailyTokenCeiling: p.PostingBehavior.DailyTokenCeiling,
+		CooldownInterval:  cooldown,
+		DailyTokenCeiling: fm.Operational.DailyTokenCeiling,
+		Phase:             phase,
+		Prohibitions:      fm.Prohibitions,
 	}, nil
 }
 

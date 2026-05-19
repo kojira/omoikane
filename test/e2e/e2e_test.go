@@ -314,10 +314,11 @@ func TestE2E_FullFlow(t *testing.T) {
 func TestE2E_LibrarianRunner(t *testing.T) {
 	r := setupRig(t)
 
-	// Build a fast-heartbeat skill bundle in a temp dir by copying the
-	// real coordinator bundle and overriding personality.yaml. We don't
-	// modify the real bundle because shipping interval = 600s; the e2e
-	// test needs sub-second to stay snappy.
+	// Build a fast-heartbeat skill bundle in a temp dir. We don't reuse
+	// the real coordinator bundle directly because shipping
+	// heartbeat_interval_seconds = 300s would make this e2e sleep too
+	// long; we substitute a 1-second SKILL.md and pull AGENTS.md /
+	// PERSONALITY.md verbatim from the real bundle.
 	src, err := filepath.Abs("../../dist/skills/librarians/coordinator")
 	if err != nil {
 		t.Fatal(err)
@@ -326,12 +327,9 @@ func TestE2E_LibrarianRunner(t *testing.T) {
 	if err := os.MkdirAll(skillDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range []string{
-		"SKILL.md", "role_definition.md", "operations.yaml",
-		"decision_protocols.md", "trigger_conditions.yaml",
-		"communication_style.md", "meta_protocol.md",
-		"error_handling.md", "self_check.md",
-	} {
+	// Copy AGENTS.md and PERSONALITY.md verbatim — runner doesn't parse
+	// them, but LoadSkill requires their presence.
+	for _, f := range []string{"AGENTS.md", "PERSONALITY.md"} {
 		b, err := os.ReadFile(filepath.Join(src, f))
 		if err != nil {
 			t.Fatal(err)
@@ -340,10 +338,21 @@ func TestE2E_LibrarianRunner(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Override personality with a fast interval.
-	if err := os.WriteFile(filepath.Join(skillDir, "personality.yaml"), []byte(
-		"id: coordinator\ndata_gathering:\n  heartbeat_interval_seconds: 1\nposting_behavior:\n  daily_token_ceiling: 1000\n",
-	), 0o644); err != nil {
+	// Override SKILL.md with a fast heartbeat. The frontmatter is the
+	// only part the runner parses; the body is irrelevant for this
+	// runtime-level test.
+	skillBody := "---\n" +
+		"name: omoikane-coordinator\n" +
+		"description: e2e test bundle\n" +
+		"operational:\n" +
+		"  heartbeat_interval_seconds: 1\n" +
+		"  cooldown_between_actions_seconds: 1\n" +
+		"  daily_token_ceiling: 1000\n" +
+		"  phase: 5\n" +
+		"---\n" +
+		"# e2e test SKILL.md\n"
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"),
+		[]byte(skillBody), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
