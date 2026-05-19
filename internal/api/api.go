@@ -177,6 +177,13 @@ func (h *Handler) Mount(r chi.Router) {
 				r.With(auth.RequireScope("write")).Patch("/instances/{id}", h.librarianSetStatus)
 				r.With(auth.RequireScope("write")).Post("/instances/{id}/heartbeat", h.librarianHeartbeat)
 
+				// FIFO backlog — each role processes oldest unprocessed
+				// entry first. /backlog/next pops the next item; /progress
+				// records that the librarian saw it (acted or chose not to).
+				r.With(auth.RequireScope("read")).Get("/backlog/next", h.librarianBacklogNext)
+				r.With(auth.RequireScope("librarian")).Post("/progress", h.librarianProgressPost)
+				r.With(auth.RequireScope("read")).Get("/progress", h.librarianProgressList)
+
 				r.With(auth.RequireScope("read")).Get("/threads", h.chatListThreads)
 				r.With(auth.RequireScope("write")).Post("/threads", h.chatOpenThread)
 				r.With(auth.RequireScope("write")).Post("/threads/{id}/close", h.chatCloseThread)

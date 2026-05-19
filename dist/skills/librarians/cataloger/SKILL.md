@@ -33,10 +33,13 @@ whitelist:
     - GET  /v1/librarian/threads
     - GET  /v1/librarian/threads/{id}/messages
     - GET  /v1/librarian/tasks
+    - GET  /v1/librarian/backlog/next      # FIFO oldest-first backlog
+    - GET  /v1/librarian/progress          # what this role has processed
   write:
     - POST /v1/librarian/instances
     - POST /v1/librarian/instances/{id}/heartbeat
     - POST /v1/librarian/chat
+    - POST /v1/librarian/progress          # mark an entry processed (with action)
     - POST /v1/feedback
     - POST /v1/entries   # librarian_meta DRAFTs only (Phase 5)
 
