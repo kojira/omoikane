@@ -67,6 +67,32 @@ func renderMarkdown(text string) template.HTML {
 func renderContent(text, token string, s *store.Store) template.HTML {
 	out := string(renderMarkdown(text))
 
+	// Pre-scan for entry-shape wiki-link targets (T/D/X/L/I/M/F/E
+	// prefix) and bulk-check their existence so we can render dead
+	// references as muted spans instead of clickable 404s. Non-entry
+	// prefixes (H- / SIT- / CL-) keep the previous always-link
+	// behaviour — those route to different dashboard pages whose
+	// existence check would have to talk to different tables; we
+	// haven't seen broken H-/SIT-/CL- refs in practice.
+	known := map[string]bool{}
+	if s != nil {
+		var candidates []string
+		for _, m := range wikiLinkRE.FindAllStringSubmatch(out, -1) {
+			if len(m) < 2 {
+				continue
+			}
+			id := m[1]
+			if isEntryShapeID(id) {
+				candidates = append(candidates, id)
+			}
+		}
+		if len(candidates) > 0 {
+			if existing, err := s.EntriesExist(context.Background(), candidates); err == nil {
+				known = existing
+			}
+		}
+	}
+
 	// Wiki links — operates on the rendered HTML. wikiLinkRE is safe
 	// to run here because [[…]] is preserved verbatim by goldmark.
 	out = wikiLinkRE.ReplaceAllStringFunc(out, func(match string) string {
@@ -79,8 +105,17 @@ func renderContent(text, token string, s *store.Store) template.HTML {
 		if len(groups) >= 3 && groups[2] != "" {
 			label = groups[2]
 		}
+		escLabel := template.HTMLEscapeString(label)
+		// Entry-shape ID that doesn't exist → muted span, not a
+		// link. Prevents click-through 404s for placeholder
+		// references that authors sometimes leave in bodies.
+		if s != nil && isEntryShapeID(id) && !known[id] {
+			return `<span class="wiki wiki-broken" ` +
+				`title="entry ` + template.HTMLEscapeString(id) +
+				` not found">` + escLabel + `</span>`
+		}
 		return `<a href="` + wikiHref(id, token) + `" class="wiki">` +
-			template.HTMLEscapeString(label) + `</a>`
+			escLabel + `</a>`
 	})
 
 	// @mentions — same approach.
@@ -115,6 +150,21 @@ func renderContent(text, token string, s *store.Store) template.HTML {
 	}
 
 	return template.HTML(out)
+}
+
+// isEntryShapeID reports whether `id` looks like an entry id — i.e.
+// starts with one of T/D/X/L/I/M/F/E followed by a hyphen. Non-entry
+// prefixes (H-, SIT-, CL-) are routed to different dashboard pages
+// and aren't checked against the entries table.
+func isEntryShapeID(id string) bool {
+	if len(id) < 3 || id[1] != '-' {
+		return false
+	}
+	switch id[0] {
+	case 'T', 'D', 'X', 'L', 'I', 'M', 'F', 'E':
+		return true
+	}
+	return false
 }
 
 // attachedImgRE matches an `<img src="attached:a-xxx" alt="...">` tag

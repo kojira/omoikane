@@ -85,6 +85,69 @@ func TestRenderContentWikiLinksSurviveMarkdown(t *testing.T) {
 	}
 }
 
+// When the store is supplied and the wiki-target entry exists, the
+// link is rendered as a live <a>.
+func TestRenderContentWikiLinksExistingEntryIsLive(t *testing.T) {
+	s := newDashStore(t)
+	mustCreateUserAndProject(t, s, "alice", "demo")
+	id, err := s.CreateEntry(context.Background(), &store.Entry{
+		ProjectID: "demo", Type: "trap",
+		Title: "real", Body: "x", Status: "ACTIVE",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := string(renderContent("see [[" + id + "]] for the real one", "", s))
+	if !strings.Contains(out, `href="/entries/`+id+`"`) {
+		t.Errorf("existing entry should render as live link: %s", out)
+	}
+	if strings.Contains(out, "wiki-broken") {
+		t.Errorf("existing entry must not be marked broken: %s", out)
+	}
+}
+
+// When the store is supplied and the wiki-target doesn't exist, the
+// link is rendered as a muted span — no <a href> to a 404.
+func TestRenderContentWikiLinksMissingEntryIsMuted(t *testing.T) {
+	s := newDashStore(t)
+	out := string(renderContent("see [[T-MISSING]] which doesn't exist", "", s))
+	if strings.Contains(out, `href="/entries/T-MISSING"`) {
+		t.Errorf("missing entry should NOT render as live link: %s", out)
+	}
+	if !strings.Contains(out, "wiki-broken") {
+		t.Errorf("missing entry should be marked with wiki-broken class: %s", out)
+	}
+	if !strings.Contains(out, "T-MISSING") {
+		t.Errorf("label should still be visible to the reader: %s", out)
+	}
+	if !strings.Contains(out, "not found") {
+		t.Errorf("tooltip should explain why the link isn't clickable: %s", out)
+	}
+}
+
+// Non-entry-shape IDs (H-, SIT-, CL-) skip the existence check —
+// they route to different dashboard pages and we don't want to query
+// the entries table for those.
+func TestRenderContentWikiLinksNonEntryShapeAlwaysLive(t *testing.T) {
+	s := newDashStore(t)
+	for _, id := range []string{"H-1", "SIT-foo", "CL-42"} {
+		out := string(renderContent("see [["+id+"]]", "", s))
+		if strings.Contains(out, "wiki-broken") {
+			t.Errorf("%s should not be marked broken: %s", id, out)
+		}
+	}
+}
+
+// When store is nil (unit-test path), behaviour is the pre-existence-check
+// status quo: always render as a link. Verifies we didn't break the
+// nil-store contract.
+func TestRenderContentWikiLinksNilStoreSkipsCheck(t *testing.T) {
+	out := string(renderContent("see [[T-NOPE]]", "", nil))
+	if !strings.Contains(out, `href="/entries/T-NOPE"`) {
+		t.Errorf("nil store path must always link: %s", out)
+	}
+}
+
 func TestRenderContentMentionsSurviveMarkdown(t *testing.T) {
 	out := string(renderContent("ping @curator please", "", nil))
 	if !strings.Contains(out, `mention-curator`) {

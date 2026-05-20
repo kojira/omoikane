@@ -48,7 +48,11 @@ func TestChatThreadsPage(t *testing.T) {
 	if !strings.Contains(string(body), "chat-msg-human") {
 		t.Fatalf("missing human class")
 	}
-	if !strings.Contains(string(body), `class="wiki"`) {
+	// The [[T-AAA]] reference is rendered with the `wiki` class. Since
+	// T-AAA doesn't actually exist in this test's store, it'll come out
+	// as the muted `wiki wiki-broken` variant; either is fine here —
+	// we're just verifying the renderer ran at all.
+	if !strings.Contains(string(body), `class="wiki`) {
 		t.Fatalf("missing wiki link")
 	}
 }

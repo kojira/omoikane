@@ -127,6 +127,13 @@ footer { padding: 1rem; text-align: center; color: var(--muted); font-size: 0.85
 .badge-status-DISMISSED { background: #eee; color: #555; }
 a.wiki { text-decoration: underline dotted; }
 a.wiki:hover { text-decoration: underline; }
+/* Wiki-link target that doesn't exist (yet) — render as muted text,
+   no click-through. Hover shows the missing id for debugging. */
+span.wiki-broken {
+    color: var(--muted);
+    text-decoration: line-through;
+    cursor: help;
+}
 ul.hier { list-style: none; padding-left: 0; }
 ul.hier li { padding: 0.4rem 0.75rem; background: #fff; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 0.4rem; }
 

@@ -161,6 +161,42 @@ func (s *Store) CreateEntry(ctx context.Context, e *Entry) (string, error) {
 	return id, nil
 }
 
+// EntriesExist returns a map of {id → true} for every id in `ids` that
+// has a row in `entries` (regardless of status). Missing ids are
+// absent from the map (not present with value=false), so the caller's
+// natural `map[id]` check returns the zero value `false`.
+//
+// Bulk check used by renderers that need to decide whether `[[L-XXX]]`
+// references should become live links or muted "broken reference"
+// indicators. One SQL round-trip regardless of len(ids).
+func (s *Store) EntriesExist(ctx context.Context, ids []string) (map[string]bool, error) {
+	out := map[string]bool{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id FROM entries WHERE id IN (`+strings.Join(placeholders, ",")+`)`,
+		args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = true
+	}
+	return out, rows.Err()
+}
+
 // GetEntry returns the current state.
 func (s *Store) GetEntry(ctx context.Context, id string) (*Entry, error) {
 	e, err := scanEntryRow(s.db.QueryRowContext(ctx, entrySelectSQL+` WHERE id = ?`, id))
