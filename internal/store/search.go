@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -232,12 +233,16 @@ func scanEntryWithRank(r scanner) (*Entry, float64, error) {
 		validTo      nullTimeBox
 		enrichmentAt nullTimeBox
 		rank         float64
+		// Scope/Metadata: empty TEXT → nil RawMessage; see scanEntry
+		// in entries.go for rationale.
+		scopeRaw string
+		metaRaw  string
 	)
 	err := r.Scan(&e.ID, &e.ProjectID, &e.Type, &e.Title, &e.Status,
 		&e.Symptom, &e.RootCause, &e.Resolution, &e.Prohibited,
 		&e.AttemptedApproaches, &e.ObservedBehavior, &e.Hypotheses,
 		&e.Body, &e.BodyFormat,
-		&e.Scope, &e.Metadata,
+		&scopeRaw, &metaRaw,
 		&e.ValidFrom, &validTo,
 		&e.SupersededBy, &e.InvalidationReason,
 		&e.EnrichmentVersion, &enrichmentAt,
@@ -246,6 +251,12 @@ func scanEntryWithRank(r scanner) (*Entry, float64, error) {
 		&e.Version, &rank)
 	if err != nil {
 		return nil, 0, translateErr(err)
+	}
+	if scopeRaw != "" {
+		e.Scope = json.RawMessage(scopeRaw)
+	}
+	if metaRaw != "" {
+		e.Metadata = json.RawMessage(metaRaw)
 	}
 	if validTo.Valid {
 		t := validTo.Time

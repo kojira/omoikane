@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"errors"
 	"time"
 )
@@ -89,8 +90,15 @@ type Entry struct {
 	Hypotheses          string     `json:"hypotheses,omitempty"`
 	Body                string     `json:"body"`
 	BodyFormat          string     `json:"body_format"`
-	Scope               string     `json:"scope,omitempty"`    // raw JSON
-	Metadata            string     `json:"metadata,omitempty"` // raw JSON
+	// Scope and Metadata are stored as TEXT in the entries table but
+	// carried on the wire as raw JSON values, not JSON-encoded
+	// strings. json.RawMessage makes a posted `metadata: {"k":"v"}`
+	// come back on read as `metadata: {"k":"v"}` (the object). Prior
+	// to migration these were `string`, which forced API responses
+	// to wrap stored JSON in another layer of escaping
+	// (e.g. `"\"{\\\"k\\\":\\\"v\\\"}\""`).
+	Scope               json.RawMessage `json:"scope,omitempty"`
+	Metadata            json.RawMessage `json:"metadata,omitempty"`
 	ValidFrom           time.Time  `json:"valid_from"`
 	ValidTo             *time.Time `json:"valid_to,omitempty"`
 	SupersededBy        string     `json:"superseded_by,omitempty"`
@@ -118,8 +126,8 @@ type EntryPatch struct {
 	Hypotheses          *string
 	Body                *string
 	BodyFormat          *string
-	Scope               *string
-	Metadata            *string
+	Scope               *json.RawMessage
+	Metadata            *json.RawMessage
 	Tags                *[]string
 
 	// Audit

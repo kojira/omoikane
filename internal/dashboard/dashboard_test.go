@@ -3,6 +3,7 @@ package dashboard
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"io/fs"
 	"net/http"
@@ -48,8 +49,8 @@ func seedEntries(t *testing.T, s *store.Store) string {
 		AttemptedApproaches: "tried fp16",
 		ObservedBehavior:    "NaN at step 5000",
 		Hypotheses:          "attention precision",
-		Scope:               `{"frameworks":["pytorch"]}`,
-		Metadata:            `{"x":1}`,
+		Scope:               json.RawMessage(`{"frameworks":["pytorch"]}`),
+		Metadata:            json.RawMessage(`{"x":1}`),
 		Tags:                []string{"mask", "preprocessing"},
 	})
 	if err != nil {

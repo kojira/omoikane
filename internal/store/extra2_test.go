@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 )
 
@@ -12,6 +13,10 @@ func TestUpdateEntryAllFields(t *testing.T) {
 	id, _ := s.CreateEntry(ctx, &Entry{ProjectID: "p", Type: "trap", Title: "x", Body: "y"})
 
 	str := func(s string) *string { return &s }
+	rawMsgPtr := func(s string) *json.RawMessage {
+		m := json.RawMessage(s)
+		return &m
+	}
 	tags := []string{"a", "b"}
 	_, updated, err := s.UpdateEntry(ctx, id, EntryPatch{
 		Title:               str("T"),
@@ -25,8 +30,8 @@ func TestUpdateEntryAllFields(t *testing.T) {
 		Hypotheses:          str("H"),
 		Body:                str("B"),
 		BodyFormat:          str("plaintext"),
-		Scope:               str(`{"x":1}`),
-		Metadata:            str(`{"y":2}`),
+		Scope:               rawMsgPtr(`{"x":1}`),
+		Metadata:            rawMsgPtr(`{"y":2}`),
 		Tags:                &tags,
 		ExpectedVersion:     1,
 		ChangedBy:           "tester",
@@ -39,7 +44,7 @@ func TestUpdateEntryAllFields(t *testing.T) {
 	if updated.Title != "T" || updated.Status != "ACTIVE" || updated.Symptom != "S" {
 		t.Fatalf("update did not apply: %+v", updated)
 	}
-	if updated.Scope != `{"x":1}` {
+	if string(updated.Scope) != `{"x":1}` {
 		t.Fatalf("scope: %q", updated.Scope)
 	}
 	if len(updated.Tags) != 2 {

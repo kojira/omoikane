@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -25,8 +26,9 @@ type EntryHistory struct {
 	Hypotheses          string     `json:"hypotheses,omitempty"`
 	Body                string     `json:"body"`
 	BodyFormat          string     `json:"body_format"`
-	Scope               string     `json:"scope,omitempty"`
-	Metadata            string     `json:"metadata,omitempty"`
+	// See Entry.Scope/Metadata for rationale — raw JSON, not strings.
+	Scope               json.RawMessage `json:"scope,omitempty"`
+	Metadata            json.RawMessage `json:"metadata,omitempty"`
 	ValidFrom           time.Time  `json:"valid_from"`
 	ValidTo             *time.Time `json:"valid_to,omitempty"`
 	SupersededBy        string     `json:"superseded_by,omitempty"`
@@ -113,7 +115,7 @@ func (s *Store) CreateEntry(ctx context.Context, e *Entry) (string, error) {
 		id, e.ProjectID, e.Type, e.Title, e.Status,
 		nullable(e.Symptom), nullable(e.RootCause), nullable(e.Resolution), nullable(e.Prohibited),
 		nullable(e.AttemptedApproaches), nullable(e.ObservedBehavior), nullable(e.Hypotheses),
-		e.Body, e.BodyFormat, nullable(e.Scope), nullable(e.Metadata),
+		e.Body, e.BodyFormat, nullableRaw(e.Scope), nullableRaw(e.Metadata),
 		now, nullableTime(e.ValidTo), nullable(e.SupersededBy), nullable(e.InvalidationReason),
 		e.EnrichmentVersion, nullableTime(e.EnrichmentAt),
 		now, now, nullable(e.CreatedBy), nullable(e.CreatedByRole),
@@ -250,11 +252,16 @@ func (s *Store) GetEntryAsOf(ctx context.Context, id string, asOf time.Time) (*E
 		h        EntryHistory
 		validTo  sql.NullTime
 		tagsBlob string
+		// EntryHistory.Scope/Metadata are json.RawMessage; same
+		// empty-text-to-nil normalisation as scanEntry to avoid
+		// emitting zero-byte RawMessage values that break encoding.
+		scopeRaw string
+		metaRaw  string
 	)
 	if err := row.Scan(&h.Version, &h.Title, &h.Status,
 		&h.Symptom, &h.RootCause, &h.Resolution, &h.Prohibited,
 		&h.AttemptedApproaches, &h.ObservedBehavior, &h.Hypotheses,
-		&h.Body, &h.BodyFormat, &h.Scope, &h.Metadata,
+		&h.Body, &h.BodyFormat, &scopeRaw, &metaRaw,
 		&h.ValidFrom, &validTo, &h.SupersededBy, &h.InvalidationReason,
 		&tagsBlob, &h.ChangedAt); err != nil {
 		if err == sql.ErrNoRows {
@@ -262,6 +269,12 @@ func (s *Store) GetEntryAsOf(ctx context.Context, id string, asOf time.Time) (*E
 			return nil, ErrNotFound
 		}
 		return nil, err
+	}
+	if scopeRaw != "" {
+		h.Scope = json.RawMessage(scopeRaw)
+	}
+	if metaRaw != "" {
+		h.Metadata = json.RawMessage(metaRaw)
 	}
 	if validTo.Valid {
 		t := validTo.Time
@@ -444,7 +457,7 @@ func (s *Store) UpdateEntry(ctx context.Context, id string, p EntryPatch) (int, 
 		nullable(merged.Symptom), nullable(merged.RootCause), nullable(merged.Resolution), nullable(merged.Prohibited),
 		nullable(merged.AttemptedApproaches), nullable(merged.ObservedBehavior), nullable(merged.Hypotheses),
 		merged.Body, merged.BodyFormat,
-		nullable(merged.Scope), nullable(merged.Metadata),
+		nullableRaw(merged.Scope), nullableRaw(merged.Metadata),
 		now, newVersion,
 		id, cur.Version,
 	)
@@ -558,16 +571,25 @@ func (s *Store) EntryHistory(ctx context.Context, id string) ([]*EntryHistory, e
 		var (
 			validTo  sql.NullTime
 			tagsBlob string
+			// Empty-string → nil RawMessage normalisation: see scanEntry.
+			scopeRaw string
+			metaRaw  string
 		)
 		if err := c.Scan(&h.EntryID, &h.Version, &h.Title, &h.Status,
 			&h.Symptom, &h.RootCause, &h.Resolution, &h.Prohibited,
 			&h.AttemptedApproaches, &h.ObservedBehavior, &h.Hypotheses,
-			&h.Body, &h.BodyFormat, &h.Scope, &h.Metadata,
+			&h.Body, &h.BodyFormat, &scopeRaw, &metaRaw,
 			&h.ValidFrom, &validTo, &h.SupersededBy, &h.InvalidationReason,
 			&tagsBlob,
 			&h.ChangedAt, &h.ChangedBy, &h.ChangedByRole, &h.ChangeSummary,
 		); err != nil {
 			return err
+		}
+		if scopeRaw != "" {
+			h.Scope = json.RawMessage(scopeRaw)
+		}
+		if metaRaw != "" {
+			h.Metadata = json.RawMessage(metaRaw)
 		}
 		if validTo.Valid {
 			t := validTo.Time
@@ -644,12 +666,20 @@ func scanEntry(r scanner) (*Entry, error) {
 		e            Entry
 		validTo      sql.NullTime
 		enrichmentAt sql.NullTime
+		// Scope and Metadata live in TEXT columns COALESCE'd to '' for
+		// NULL. We scan into a string and post-process to RawMessage:
+		// empty TEXT → nil RawMessage so `omitempty` drops the field
+		// from API responses cleanly. (Empty json.RawMessage that is
+		// non-nil marshals as zero bytes, which breaks the surrounding
+		// JSON encoding.)
+		scopeRaw string
+		metaRaw  string
 	)
 	err := r.Scan(&e.ID, &e.ProjectID, &e.Type, &e.Title, &e.Status,
 		&e.Symptom, &e.RootCause, &e.Resolution, &e.Prohibited,
 		&e.AttemptedApproaches, &e.ObservedBehavior, &e.Hypotheses,
 		&e.Body, &e.BodyFormat,
-		&e.Scope, &e.Metadata,
+		&scopeRaw, &metaRaw,
 		&e.ValidFrom, &validTo,
 		&e.SupersededBy, &e.InvalidationReason,
 		&e.EnrichmentVersion, &enrichmentAt,
@@ -658,6 +688,12 @@ func scanEntry(r scanner) (*Entry, error) {
 		&e.Version)
 	if err != nil {
 		return nil, translateErr(err)
+	}
+	if scopeRaw != "" {
+		e.Scope = json.RawMessage(scopeRaw)
+	}
+	if metaRaw != "" {
+		e.Metadata = json.RawMessage(metaRaw)
 	}
 	if validTo.Valid {
 		t := validTo.Time
@@ -833,7 +869,7 @@ func writeHistoryTx(ctx context.Context, tx *sql.Tx, id string, version int, e *
 		e.Title, e.Status,
 		nullable(e.Symptom), nullable(e.RootCause), nullable(e.Resolution), nullable(e.Prohibited),
 		nullable(e.AttemptedApproaches), nullable(e.ObservedBehavior), nullable(e.Hypotheses),
-		e.Body, e.BodyFormat, nullable(e.Scope), nullable(e.Metadata),
+		e.Body, e.BodyFormat, nullableRaw(e.Scope), nullableRaw(e.Metadata),
 		e.ValidFrom, nullableTime(e.ValidTo), nullable(e.SupersededBy), nullable(e.InvalidationReason),
 		encodeTagsSnapshot(tags),
 		changedAt, nullable(changedBy), nullable(changedByRole), nullable(summary),

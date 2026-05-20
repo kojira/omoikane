@@ -39,8 +39,8 @@
   </div>
 </div>
 
-{{if .Scope}}<div class="field"><div class="label">Scope</div><div class="body"><code>{{.Scope}}</code></div></div>{{end}}
-{{if .Metadata}}<div class="field"><div class="label">Metadata</div><div class="body"><code>{{.Metadata}}</code></div></div>{{end}}
+{{if .Scope}}<div class="field"><div class="label">Scope</div><div class="body"><code>{{printf "%s" .Scope}}</code></div></div>{{end}}
+{{if .Metadata}}<div class="field"><div class="label">Metadata</div><div class="body"><code>{{printf "%s" .Metadata}}</code></div></div>{{end}}
 {{end}}
 
 {{if .Signals}}

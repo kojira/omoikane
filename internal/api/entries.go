@@ -104,8 +104,8 @@ func (h *Handler) createEntry(w http.ResponseWriter, r *http.Request) {
 		Hypotheses:          req.Hypotheses,
 		Body:                req.Body,
 		BodyFormat:          req.BodyFormat,
-		Scope:               scopeJSON,
-		Metadata:            metaJSON,
+		Scope:               json.RawMessage(scopeJSON),
+		Metadata:            json.RawMessage(metaJSON),
 		CreatedBy:           createdBy,
 		CreatedByRole:       createdByRole,
 		Tags:                req.Tags,
@@ -369,14 +369,18 @@ func (h *Handler) updateEntry(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	bindJSON := func(key string, dst **string) {
+	// scope / metadata: store the raw JSON bytes from the request as
+	// json.RawMessage so the field survives the round-trip without
+	// being re-stringified. (Other fields have dedicated string ptrs
+	// on the patch struct; only these two are RawMessage.)
+	bindRaw := func(key string, dst **json.RawMessage) {
 		if v, ok := raw[key]; ok {
-			s := string(v)
-			*dst = &s
+			rm := json.RawMessage(v)
+			*dst = &rm
 		}
 	}
-	bindJSON("scope", &patch.Scope)
-	bindJSON("metadata", &patch.Metadata)
+	bindRaw("scope", &patch.Scope)
+	bindRaw("metadata", &patch.Metadata)
 	if v, ok := raw["tags"]; ok {
 		var tags []string
 		if err := json.Unmarshal(v, &tags); err != nil {
@@ -498,6 +502,12 @@ func mergePatchOnto(cur *store.Entry, p store.EntryPatch) secrets.Doc {
 		}
 		return fallback
 	}
+	// secrets.Doc.Metadata expects raw JSON TEXT (string). Convert from
+	// json.RawMessage by taking the underlying bytes.
+	metaText := string(cur.Metadata)
+	if p.Metadata != nil {
+		metaText = string(*p.Metadata)
+	}
 	return secrets.Doc{
 		Title:               val(p.Title, cur.Title),
 		Body:                val(p.Body, cur.Body),
@@ -508,7 +518,7 @@ func mergePatchOnto(cur *store.Entry, p store.EntryPatch) secrets.Doc {
 		AttemptedApproaches: val(p.AttemptedApproaches, cur.AttemptedApproaches),
 		ObservedBehavior:    val(p.ObservedBehavior, cur.ObservedBehavior),
 		Hypotheses:          val(p.Hypotheses, cur.Hypotheses),
-		Metadata:            val(p.Metadata, cur.Metadata),
+		Metadata:            metaText,
 	}
 }
 

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"time"
 )
 
@@ -59,4 +60,16 @@ func nullable(s string) any {
 		return sql.NullString{}
 	}
 	return s
+}
+
+// nullableRaw is the json.RawMessage equivalent of nullable: an empty
+// or nil RawMessage becomes SQL NULL, anything else is bound as its
+// underlying bytes. Used for Entry.Scope / Entry.Metadata so the API
+// can carry actual JSON values on the wire while the column stays
+// plain TEXT.
+func nullableRaw(m json.RawMessage) any {
+	if len(m) == 0 {
+		return sql.NullString{}
+	}
+	return string(m)
 }
