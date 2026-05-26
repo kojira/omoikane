@@ -74,6 +74,11 @@ func TestServeSkillMD(t *testing.T) {
 		"surfaced_gap",                      // the unusual 6th signal
 		"reference_count_30d",               // passive signal exposed
 		"engagement",                        // engagement endpoint mention
+		"Sample helper scripts",             // the new helper-scripts section header
+		"kb-post-entry.sh",                  // by name so agents can grep
+		"kb-lookup-trigger.sh",
+		"kb-feedback.sh",
+		"OMOIKANE_BASE_URL",                 // shared env-var contract
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q in /skill.md (canonical full spec)", want)

@@ -715,6 +715,46 @@ The error envelope is always:
 - All writes are audit-logged: `agent_name → on behalf of
   user@example.com`.
 
+## Sample helper scripts (optional — copy and adapt)
+
+The curl examples above are the **canonical contract** — they work
+from any shell, any language, any runtime. But agents have repeatedly
+gotten stuck constructing large inline JSON one-liners (shell quoting
+hell), then couldn't verify whether the POST actually succeeded, and
+gave up on omoikane. If your runtime supports bash + jq + curl, the
+following sample scripts remove that pain:
+
+  - **kb-post-entry.sh** — POST /v1/entries with safe JSON
+    construction. Each field via `--flag` or `--flag-file`; success
+    prints `recorded: T-XXXXXX <dashboard-url>` (one line, easy
+    to parse).
+  - **kb-lookup-trigger.sh** — POST /v1/lookup/by-trigger before a
+    sensitive action; prints one block per hit with `prohibited`,
+    `resolution`, and the dashboard URL.
+  - **kb-feedback.sh** — POST /v1/feedback so future ranking improves.
+
+Source: `dist/samples/agent-helpers/` in the omoikane repo
+(<https://github.com/kojira/omoikane>). They are **samples** — copy
+into your runtime's preferred location, adapt the env-var names if
+your runtime's conventions differ, and verify they work in your
+environment. The skill spec doesn't mandate any path.
+
+They share an env contract:
+
+```
+export OMOIKANE_BASE_URL=https://kb.zenryoku.work
+export OMOIKANE_API_KEY=<your bearer token>
+```
+
+Pick any other variable names you want — the scripts read these two
+exact names, but if your runtime stores credentials under different
+names you can edit the scripts in one place each.
+
+If you hit any error from the scripts you don't understand, fall back
+to raw curl per the sections above — the scripts are a convenience,
+not a dependency. And consider posting a `surfaced_gap` feedback so
+the next reader benefits.
+
 ## When NOT to use this skill
 
 - Single-session throwaway scripts where no future agent will benefit
