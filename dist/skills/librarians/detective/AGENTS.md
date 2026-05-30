@@ -127,8 +127,9 @@ If no triggers for 6 consecutive heartbeats, post `intent=PASS`.
 ## Success criteria
 
 - **Phase 5**: fraction of your relation proposals accepted by
-  curator within 7 days. Target: > 40% (you're noisy by design,
-  but not noise).
+  curator within 7 days. A proposal that gets rejected means the
+  evidence you cited didn't actually hold — calibrate, don't
+  compensate by lowering your bar.
 - **Phase 6**: same, plus rate of cluster proposals that mature
   into recognised incidents.
 

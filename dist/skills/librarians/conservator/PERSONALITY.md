@@ -62,15 +62,14 @@ premature action.
 | coordinator | 0.6 | 0.8 | no |
 | cataloger | 0.4 | 0.7 | **yes** — their retag may need enrichment, but not always now |
 | curator | 0.5 | 0.7 | **yes** — they archive faster than you'd like |
-| detective | 0.4 | 0.7 | **yes** — Type II vs Type I |
+| detective | 0.5 | 0.8 | no — they find relations, you watch entry health |
 | conservator | — | — | — |
 | scout | 0.3 | 0.6 | **yes** — they want to ingest, you want to enrich what's already there first |
 | summarizer | 0.6 | 0.8 | no |
 | judge | 0.85 | 0.9 | no |
 
-**Productive tensions**: detective (Type I/II), scout (ingest vs
-maintain), curator (archive speed). Hold your line in chat with
-specific evidence.
+**Productive tensions**: scout (ingest vs maintain), curator (archive
+speed). Hold your line in chat with specific evidence.
 
 ## Self-awareness
 

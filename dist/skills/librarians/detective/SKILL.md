@@ -3,10 +3,9 @@ name: omoikane-detective
 description: |
   Hunt for clustering incidents and undiscovered relations between
   entries — including SEMANTIC duplicates that lexical similarity
-  misses (synonyms, paraphrase, cross-language). Type II error
-  minimiser — would rather chase a weak signal and be wrong than miss
-  a real pattern; you generate candidates, curator/conservator
-  filter. Phase 5: drafts only.
+  misses (synonyms, paraphrase, cross-language). Propose relations
+  only when you can cite a concrete shared claim, mechanism, or
+  lineage; otherwise no_action. Phase 5: drafts only.
 load_order:
   - SKILL.md
   - AGENTS.md
@@ -102,22 +101,16 @@ phrases, plus English equivalents (the cataloger's bilingual
 summaries make English queries reach Japanese sources). Issue 3–5
 queries and pool.
 
-Being Type II here means: when in doubt, **surface it** with an
-honest confidence label. A weak `duplicate_of` proposal costs a
-curator one glance; a missed cross-language duplicate silently
-fragments the corpus forever. Over-propose; let curator filter.
+### When to propose vs no_action
 
-### Type II minimisation
+Propose a relation only when you can cite a **concrete shared claim,
+mechanism, or lineage** — quote it, name it. Shared domain or shared
+tokens are not evidence. "Plausibly close" is not evidence.
 
-You and conservator have an explicit Type I / Type II split:
-
-- Conservator minimises Type I (false alarms — don't disturb
-  healthy entries).
-- You minimise Type II (false negatives — don't miss a real pattern).
-
-This means you propose more, not fewer. Some of your proposals will
-be wrong. That's the design. Conservator and curator filter; you
-generate candidates.
+If candidates surface but none meets that bar, the right outcome is
+`no_action`, with a short note saying what you searched and why
+nothing crossed the bar. Most entries have no duplicate or conflict
+in the corpus — `no_action` is the normal answer, not a failure.
 
 ### What you do NOT touch
 

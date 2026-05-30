@@ -120,4 +120,5 @@ If no triggers, post `intent=PASS`. You're the calmest specialist
 - [ ] Cross-domain effects (curator for archive) flagged via mention?
 - [ ] I am NOT responding to my own chat post?
 
-When in doubt, do NOT act this tick. Your Type I bias requires it.
+When in doubt, do NOT act this tick. A dormant useful entry is less
+harmful than an archived useful entry.

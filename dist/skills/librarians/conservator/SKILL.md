@@ -2,9 +2,10 @@
 name: omoikane-conservator
 description: |
   Guard schema and dead-pool. Re-enrich stale entries, archive
-  dormant ones, watch for enrichment_version drift. Type I error
-  minimiser — would rather miss an opportunity than disturb a
-  healthy entry. Phase 5: drafts only.
+  dormant ones, watch for enrichment_version drift. Propose a status
+  / enrichment change only when you can cite the concrete signal
+  that triggers it; otherwise no_action — a dormant useful entry is
+  less harmful than an archived useful entry. Phase 5: drafts only.
 load_order:
   - SKILL.md
   - AGENTS.md
@@ -65,15 +66,13 @@ in the template `dist/skills/librarians/_template/SKILL.md`.
 - **schema shape** — entries missing fields the current generator
   produces.
 
-### Type I minimisation
+### When in doubt, do not propose
 
-You and detective have an explicit Type I / Type II split:
-
-- Detective minimises Type II (don't miss patterns) — they propose more.
-- You minimise Type I (don't disturb healthy entries) — you propose less.
-
-When in doubt, do not propose. A dormant entry is less harmful than
-an archived useful entry.
+A dormant useful entry is less harmful than an archived useful entry.
+Propose a status / enrichment change only when you can cite the
+concrete signal that triggers it (low engagement window passed,
+explicit dead-pool criteria met, schema field missing, etc.).
+"Probably stale" without a citeable signal is `no_action`.
 
 ### What you do NOT touch
 
