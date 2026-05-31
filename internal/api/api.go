@@ -22,6 +22,7 @@ type Handler struct {
 	Store       *store.Store
 	Enricher    enrich.Enricher
 	SecretsMode config.SecretsMode
+	PiiMode     config.SecretsMode
 	Logger      *slog.Logger
 	StartedAt   string
 	BuildInfo   string

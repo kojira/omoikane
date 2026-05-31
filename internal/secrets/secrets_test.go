@@ -9,7 +9,7 @@ import (
 
 func TestDetectsGitHubToken(t *testing.T) {
 	body := "the leak: ghp_1234567890abcdefghijKLMNOPQRSTUVWXYZ012 — please redact"
-	f := Scan(Doc{Body: body})
+	f := ScanSecrets(Doc{Body: body})
 	if len(f) == 0 {
 		t.Fatal("expected github_token finding")
 	}
@@ -19,14 +19,14 @@ func TestDetectsGitHubToken(t *testing.T) {
 }
 
 func TestDetectsAWSAccessKey(t *testing.T) {
-	f := Scan(Doc{Symptom: "Use AKIAIOSFODNN7EXAMPLE here"})
+	f := ScanSecrets(Doc{Symptom: "Use AKIAIOSFODNN7EXAMPLE here"})
 	if len(f) == 0 || f[0].Pattern != "aws_access_key" {
 		t.Fatalf("expected aws_access_key, got %+v", f)
 	}
 }
 
 func TestDetectsPrivateKey(t *testing.T) {
-	f := Scan(Doc{Body: "-----BEGIN OPENSSH PRIVATE KEY-----\n..."})
+	f := ScanSecrets(Doc{Body: "-----BEGIN OPENSSH PRIVATE KEY-----\n..."})
 	if len(f) == 0 || f[0].Pattern != "private_key" {
 		t.Fatalf("expected private_key, got %+v", f)
 	}
@@ -38,7 +38,7 @@ func TestDetectsPrivateKey(t *testing.T) {
 // time only broke legitimate use. These tests lock that non-behaviour so
 // PII detection can't quietly creep back in.
 func TestDoesNotFlagEmail(t *testing.T) {
-	f := Scan(Doc{Body: "contact alice@example.com for help, or k@zenryokukikai.com"})
+	f := ScanSecrets(Doc{Body: "contact alice@example.com for help, or k@zenryokukikai.com"})
 	if len(f) != 0 {
 		t.Fatalf("email must not be flagged (PII is not policed), got %+v", f)
 	}
@@ -46,7 +46,7 @@ func TestDoesNotFlagEmail(t *testing.T) {
 
 func TestDoesNotFlagGitSSHRemote(t *testing.T) {
 	// The original false-positive: an SSH remote read as an "email".
-	f := Scan(Doc{Body: "clone with git@github.com:zenryokukikai/lipsync-engine.git"})
+	f := ScanSecrets(Doc{Body: "clone with git@github.com:zenryokukikai/lipsync-engine.git"})
 	if len(f) != 0 {
 		t.Fatalf("git@host SSH remote must not be flagged, got %+v", f)
 	}
@@ -59,14 +59,14 @@ func TestDoesNotFlagCardLikeOrPhoneOrAccountDigits(t *testing.T) {
 		"account 1234567890123456 at the bank", // 16-digit run
 		"run id 20260601123045 build 1111111111111111", // timestamps / hashes
 	} {
-		if f := Scan(Doc{Body: body}); len(f) != 0 {
+		if f := ScanSecrets(Doc{Body: body}); len(f) != 0 {
 			t.Fatalf("numeric/PII content must not be flagged: %q → %+v", body, f)
 		}
 	}
 }
 
 func TestCleanDocReturnsNoFindings(t *testing.T) {
-	f := Scan(Doc{
+	f := ScanSecrets(Doc{
 		Title: "Mask preprocessing trap",
 		Body:  "Use landmark-driven soft mask, not rectangular mask.",
 	})
@@ -75,11 +75,33 @@ func TestCleanDocReturnsNoFindings(t *testing.T) {
 	}
 }
 
+// When a deployment opts INTO PII scanning (KB_PII_MODE != off), ScanPII
+// catches email and Luhn-valid cards, but Luhn still filters timestamps.
+func TestScanPIICatchesEmailAndCardWhenEnabled(t *testing.T) {
+	f := ScanPII(Doc{Body: "mail alice@example.com card 4242 4242 4242 4242"})
+	got := map[string]bool{}
+	for _, x := range f {
+		got[x.Pattern] = true
+	}
+	if !got["email"] || !got["credit_card"] {
+		t.Fatalf("ScanPII should catch email+credit_card, got %+v", f)
+	}
+}
+
+func TestScanPIILuhnFiltersNonCards(t *testing.T) {
+	f := ScanPII(Doc{Body: "run 20260601123045 hash 1111111111111111"})
+	for _, x := range f {
+		if x.Pattern == "credit_card" {
+			t.Fatalf("non-card digit run flagged: %+v", x)
+		}
+	}
+}
+
 func TestFindingDoesNotLeakValue(t *testing.T) {
 	// The leaked token must not appear in the Finding struct's stringified
 	// form (we only ever expose pattern/field/offset/length).
 	leak := "ghp_1234567890abcdefghijKLMNOPQRSTUVWXYZ012"
-	f := Scan(Doc{Body: leak})
+	f := ScanSecrets(Doc{Body: leak})
 	if len(f) == 0 {
 		t.Fatal("nothing detected")
 	}

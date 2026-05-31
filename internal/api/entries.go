@@ -471,25 +471,42 @@ func (h *Handler) entryHistory(w http.ResponseWriter, r *http.Request) {
 
 // ===== helpers =====
 
-// rejectIfSecrets runs the scanner and, when running in enforce mode and
-// findings exist, writes a 422 SECRETS_DETECTED response. Returns true when
-// the caller should stop processing. In warn / off mode it never rejects;
-// warn mode emits a log line.
+// rejectIfSecrets runs two independent scanners — credential-leak
+// (KB_SECRETS_MODE, default enforce) and PII (KB_PII_MODE, default off) —
+// and writes a 422 SECRETS_DETECTED when either is in enforce mode and has
+// findings. Returns true when the caller should stop. In warn mode a class
+// logs but does not block; in off mode it is skipped entirely.
+//
+// The two are separate so a deployment can block real credential leaks
+// while never policing PII (the default), or vice-versa. Note the secret
+// patterns are structural, so a documented EXAMPLE token also matches —
+// authors of security knowledge can set KB_SECRETS_MODE=warn or off.
 func (h *Handler) rejectIfSecrets(w http.ResponseWriter, d secrets.Doc) bool {
-	if h.SecretsMode == config.SecretsOff {
-		return false
+	var blocking []secrets.Finding
+
+	scan := func(mode config.SecretsMode, run func(secrets.Doc) []secrets.Finding, label string) {
+		if mode == config.SecretsOff {
+			return
+		}
+		f := run(d)
+		if len(f) == 0 {
+			return
+		}
+		if mode == config.SecretsWarn {
+			h.Logger.Warn(label+" detected (warn mode)", "findings", len(f))
+			return
+		}
+		blocking = append(blocking, f...)
 	}
-	findings := secrets.Scan(d)
-	if len(findings) == 0 {
-		return false
-	}
-	if h.SecretsMode == config.SecretsWarn {
-		h.Logger.Warn("secrets detected (warn mode)", "findings", len(findings))
+	scan(h.SecretsMode, secrets.ScanSecrets, "secrets")
+	scan(h.PiiMode, secrets.ScanPII, "pii")
+
+	if len(blocking) == 0 {
 		return false
 	}
 	writeError(w, http.StatusUnprocessableEntity, CodeSecretsDetected,
 		"Write rejected: secret or PII detected. Remove the offending data and retry.",
-		map[string]any{"findings": findings})
+		map[string]any{"findings": blocking})
 	return true
 }
 

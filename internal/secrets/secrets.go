@@ -43,9 +43,23 @@ type pattern struct {
 	re   *regexp.Regexp
 }
 
-// patterns is a small, audited list. Order does not matter — every pattern
-// scans every field. Each `name` is the value reported in `findings[].pattern`.
-var patterns = []pattern{
+// Two independent scanners, each with its own mode switch:
+//
+//   - secretPatterns: CREDENTIAL leaks (cloud keys, tokens, private keys)
+//     that are exploitable if committed. Gated by KB_SECRETS_MODE
+//     (default enforce). NOTE these are structural matches, so a
+//     documented EXAMPLE token (`ghp_...` in a "don't commit tokens"
+//     entry) is also caught — set KB_SECRETS_MODE=warn (log, don't
+//     block) or off when authoring such security knowledge.
+//
+//   - piiPatterns: PII (email, card numbers). Gated by KB_PII_MODE
+//     (default OFF) because omoikane is shared inside one org and the
+//     privacy boundary is per-project scope, not write-time censorship.
+//     Policing PII by default only broke legitimate use (an SSH remote
+//     `git@github.com:...` read as an "email", or any project recording
+//     contact addresses). A project that wants PII protection turns the
+//     switch on. See docs/design.md §12.3.
+var secretPatterns = []pattern{
 	{"aws_access_key", regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`)},
 	{"aws_secret_key_assignment", regexp.MustCompile(`(?i)(aws[_-]?secret[_-]?access[_-]?key)\s*[:=]\s*["']?([A-Za-z0-9/+=]{40})["']?`)},
 	{"github_token", regexp.MustCompile(`\b(ghp|gho|ghs|ghr|github_pat)_[A-Za-z0-9_]{20,}\b`)},
@@ -57,14 +71,12 @@ var patterns = []pattern{
 	{"generic_api_key", regexp.MustCompile(`(?i)(api[_-]?key|secret|access[_-]?token|auth[_-]?token)\s*[:=]\s*["']?([A-Za-z0-9_\-\.]{20,})["']?`)},
 }
 
-// NOTE: this is a CREDENTIAL-LEAK scanner, not a PII scanner. It blocks
-// secrets that are exploitable if committed (cloud keys, tokens, private
-// keys). It does NOT detect or block PII such as email addresses, phone
-// numbers, bank accounts, or card numbers. omoikane is shared inside one
-// organisation, and per-project scope is the privacy boundary — policing
-// PII at write time only broke legitimate use (e.g. an SSH remote
-// `git@github.com:...` read as an "email", or any project that records
-// contact addresses). See docs/design.md §12.3.
+var piiPatterns = []pattern{
+	{"email", regexp.MustCompile(`\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b`)},
+	// Credit card: 13-19 digit run, must pass Luhn (looksLikeCard) to cut
+	// false positives from timestamps / hashes / version strings.
+	{"credit_card_candidate", regexp.MustCompile(`\b(?:\d[ -]?){13,19}\b`)},
+}
 
 // Scan runs all patterns against all fields and returns findings.
 // Empty findings = clean. The caller maps non-empty results to either:
@@ -72,12 +84,8 @@ var patterns = []pattern{
 //   - SecretsEnforce → 422 SECRETS_DETECTED (write rejected)
 //   - SecretsWarn    → write proceeds, findings logged
 //   - SecretsOff     → never call Scan
-func Scan(d Doc) []Finding {
-	type fielded struct {
-		name string
-		text string
-	}
-	fields := []fielded{
+func docFields(d Doc) []struct{ name, text string } {
+	return []struct{ name, text string }{
 		{"title", d.Title},
 		{"body", d.Body},
 		{"symptom", d.Symptom},
@@ -89,14 +97,28 @@ func Scan(d Doc) []Finding {
 		{"hypotheses", d.Hypotheses},
 		{"metadata", d.Metadata},
 	}
+}
+
+func scanWith(d Doc, pats []pattern) []Finding {
 	var out []Finding
-	for _, f := range fields {
+	for _, f := range docFields(d) {
 		if f.text == "" {
 			continue
 		}
-		for _, p := range patterns {
-			locs := p.re.FindAllStringIndex(f.text, -1)
-			for _, loc := range locs {
+		for _, p := range pats {
+			for _, loc := range p.re.FindAllStringIndex(f.text, -1) {
+				// credit_card needs a Luhn check to avoid flagging
+				// timestamps / hashes as cards.
+				if p.name == "credit_card_candidate" {
+					if !looksLikeCard(f.text[loc[0]:loc[1]]) {
+						continue
+					}
+					out = append(out, Finding{
+						Pattern: "credit_card", Field: f.name,
+						Offset: loc[0], Length: loc[1] - loc[0],
+					})
+					continue
+				}
 				out = append(out, Finding{
 					Pattern: p.name, Field: f.name,
 					Offset: loc[0], Length: loc[1] - loc[0],
@@ -105,6 +127,49 @@ func Scan(d Doc) []Finding {
 		}
 	}
 	return out
+}
+
+// ScanSecrets finds credential leaks (gated by KB_SECRETS_MODE).
+func ScanSecrets(d Doc) []Finding { return scanWith(d, secretPatterns) }
+
+// ScanPII finds PII (email / card numbers). Only meaningful when
+// KB_PII_MODE is enforce/warn; the default is off and callers skip it.
+func ScanPII(d Doc) []Finding { return scanWith(d, piiPatterns) }
+
+// looksLikeCard runs Luhn on the digits-only form, rejecting trivially
+// repeating runs, so log timestamps / version strings don't match.
+func looksLikeCard(raw string) bool {
+	var digits []byte
+	for i := 0; i < len(raw); i++ {
+		if c := raw[i]; c >= '0' && c <= '9' {
+			digits = append(digits, c)
+		}
+	}
+	if len(digits) < 13 || len(digits) > 19 {
+		return false
+	}
+	allSame := true
+	for i := 1; i < len(digits); i++ {
+		if digits[i] != digits[0] {
+			allSame = false
+			break
+		}
+	}
+	if allSame {
+		return false
+	}
+	sum, alt := 0, false
+	for i := len(digits) - 1; i >= 0; i-- {
+		n := int(digits[i] - '0')
+		if alt {
+			if n *= 2; n > 9 {
+				n -= 9
+			}
+		}
+		sum += n
+		alt = !alt
+	}
+	return sum%10 == 0
 }
 
 // Verdict bundles the scan result with the configured mode so callers can

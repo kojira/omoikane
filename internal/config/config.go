@@ -33,6 +33,7 @@ type Config struct {
 	LLMEndpoint         string
 	LLMMonthlyBudgetUSD float64
 	SecretsMode         SecretsMode
+	PiiMode             SecretsMode // PII (email/card) scan mode; default off
 	TriggerRulesPath    string        // optional path to trigger_rules.yaml
 	ClusterInterval     time.Duration // Phase 3: background incident clustering cadence; 0 disables
 	ClusterThreshold    float64       // Phase 3: Jaccard threshold for clustering (default 0.4)
@@ -92,6 +93,17 @@ func Load() (*Config, error) {
 		c.SecretsMode = SecretsMode(mode)
 	default:
 		return nil, fmt.Errorf("KB_SECRETS_MODE: must be enforce|warn|off, got %q", mode)
+	}
+
+	// PII (email / card numbers) is a SEPARATE switch, default OFF —
+	// omoikane is shared inside one org and per-project scope is the
+	// privacy boundary, so PII is not policed unless a deployment opts in.
+	piiMode := strings.ToLower(envDefault("KB_PII_MODE", "off"))
+	switch SecretsMode(piiMode) {
+	case SecretsEnforce, SecretsWarn, SecretsOff:
+		c.PiiMode = SecretsMode(piiMode)
+	default:
+		return nil, fmt.Errorf("KB_PII_MODE: must be enforce|warn|off, got %q", piiMode)
 	}
 
 	clusterInterval, err := envDuration("KB_CLUSTER_INTERVAL", 0)

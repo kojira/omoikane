@@ -180,6 +180,7 @@ func BuildRouter(st *store.Store, cfg *config.Config, logger *slog.Logger) (http
 		Store:       st,
 		Enricher:    enr,
 		SecretsMode: cfg.SecretsMode,
+		PiiMode:     cfg.PiiMode,
 		Logger:      logger,
 		StartedAt:   time.Now().UTC().Format(time.RFC3339),
 		BuildInfo:   BuildVersion,

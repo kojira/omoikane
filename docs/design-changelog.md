@@ -22,26 +22,32 @@
 
 ### 変更点
 
-- §12.3: スキャナを「**認証情報漏洩スキャナ**」に再定義。`email` /
-  `credit_card` / `ipv4_private` パターンを撤去(電話番号・銀行口座は元々
-  非対象)。残るのは悪用可能な秘密(AWS鍵・GitHub/Slack token・JWT・秘密鍵・
-  api_key代入)のみ。実装は internal/secrets/secrets.go から該当パターンと
-  Luhn判定を削除、PII検知の逆向き回帰テストを追加。
+- §12.3: スキャナを**secret(認証情報)とPII(email/card)の2系統に分離**し、
+  それぞれ独立スイッチ化。`KB_SECRETS_MODE`(既定enforce)/ `KB_PII_MODE`
+  (**既定off**)。既定では PII を検閲せず(email/SSHリモートが書ける)、
+  認証情報漏洩だけ拒否。PII が必要なプロジェクトを持つデプロイは
+  `KB_PII_MODE=enforce|warn` で on にできる。実装は secrets.go を
+  secretPatterns/piiPatterns + ScanSecrets/ScanPII に再構成、config に
+  PiiMode 追加、rejectIfSecrets で両モード独立適用。
+- example トークン対策を明記: secret は構造マッチなので example でも弾く →
+  セキュリティ知識を書くときは `KB_SECRETS_MODE=warn|off`。
 
 ### 設計判断の根拠
 
-- **PII 検閲は KB の仕事ではない。** omoikane は単一組織内で共有され、
-  プライバシー境界は**プロジェクトスコープの分離**で確保する(将来スコープが
-  分かれれば自動的に安全になる)。書き込み時 PII ブロックは誤検知だらけで
-  使い勝手を著しく損なうわりに、社内共有という前提では守る対象がない。
-- **secret(認証情報)ブロックは維持。** 流出すると即悪用される鍵・トークン
-  だけは enforce で拒否し続ける(github token を使った 422 テストは不変)。
+- **PII 検閲は既定 off。** omoikane は単一組織内で共有され、プライバシー
+  境界は**プロジェクトスコープの分離**で確保する。書き込み時 PII ブロックは
+  誤検知だらけで使い勝手を著しく損なう。ただし完全削除でなく**スイッチで
+  on にできる**形にして、PII を扱うプロジェクトの選択肢を残す。
+- **secret(認証情報)ブロックは既定 enforce で維持。** 流出すると即悪用
+  される鍵・トークンは拒否し続ける(github token の 422 テスト不変)。
+  example で困る場合のみ warn/off に切れる。
 - 安全側に倒しすぎてツールが使えなくなる < まず使い勝手の良いものを作る。
+  ハードコードでなく**スイッチで運用者が安全と使い勝手を選べる**ようにする。
 
 ### 影響範囲
 
-- email/カード/IP を含む entry が書けるようになる(本番 deploy で反映)。
-- secret 検知の挙動は不変。Phase 計画への影響なし。
+- 既定で email/カード/SSHリモートを含む entry が書けるようになる(本番反映)。
+- secret 検知の既定挙動は不変。Phase 計画への影響なし。
 
 ---
 
