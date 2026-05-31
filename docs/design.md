@@ -1,10 +1,14 @@
 # Agent Knowledge Base — 設計書
 
-**バージョン**: 0.10
+**バージョン**: 0.11
 **対象実装環境**: Claude Code(自律実装エージェント)
 **読み手**: 実装エージェント、後続の保守者
 **最終更新**: 2026-06-01
 **変更履歴**: [docs/design-changelog.md](design-changelog.md) 参照
+
+**v0.11 の主な変更(v0.10 からの差分)**:
+
+- §23: summarizer を「チャット要約 + 日次ジャーナル」に拡張。朝イチで前日分(scout外部finding+新規知見+司書活動)を1本に蒸留し、**ACTIVE で投稿**(Phase5「司書はDRAFTのみ」の明示的例外)
 
 **v0.10 の主な変更(v0.9 からの差分)**:
 
@@ -1475,8 +1479,16 @@ KB を Level C 完全自走運用するため、**個性を持つ複数の司書
 | Detective | incidents / clusters / relations(discovery) | incident 蓄積、定期スキャン |
 | Conservator | enrichment_version / dead_pool / schema | バージョン drift、休眠閾値 |
 | Scout | external_findings | ハートビート、興味分野での新着 |
-| Summarizer | chat_threads クロージング | thread 終了条件発火 |
+| Summarizer | chat_threads クロージング + 日次ジャーナル | thread 終了条件発火 / 朝イチ |
 | Judge | quartet_assignments | クォーテット議論終了時 |
+
+> **日次ジャーナル(summarizer)**: summarizer は「揮発的/散在する信号を
+> durable な可読形に蒸留する」役。チャットスレッドに加え、**朝イチで前日
+> 1日分(scout の external_finding + 新規 trap/lesson/decision 等 + 司書の
+> 活動量)を1本のジャーナルに束ねる**。このジャーナルだけは **ACTIVE で投稿**
+> する(Phase 5 の「司書は DRAFT のみ」の明示的例外)。理由: ジャーナルは
+> 書いた瞬間に読まれ検索されるためにある — DRAFT では目的を果たせない。
+> スレッド要約は従来通り DRAFT。
 
 責任の重複ルール:
 - Relations: Detective が発見、Curator が conflict 判断と supersede
