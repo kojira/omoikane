@@ -32,39 +32,35 @@ func TestDetectsPrivateKey(t *testing.T) {
 	}
 }
 
-func TestDetectsEmail(t *testing.T) {
-	f := Scan(Doc{Body: "contact alice@example.com for help"})
-	found := false
-	for _, x := range f {
-		if x.Pattern == "email" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("expected email finding, got %+v", f)
-	}
-}
-
-func TestDetectsLuhnValidCard(t *testing.T) {
-	// 4242 4242 4242 4242 — Stripe test card, Luhn valid
-	f := Scan(Doc{Body: "use 4242 4242 4242 4242 to test"})
-	found := false
-	for _, x := range f {
-		if x.Pattern == "credit_card" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("expected credit_card, got %+v", f)
+// This is a CREDENTIAL-LEAK scanner, not a PII scanner. Email addresses,
+// card-like digit runs, phone numbers, and bank accounts must NOT be
+// flagged — omoikane is shared inside one org and policing PII at write
+// time only broke legitimate use. These tests lock that non-behaviour so
+// PII detection can't quietly creep back in.
+func TestDoesNotFlagEmail(t *testing.T) {
+	f := Scan(Doc{Body: "contact alice@example.com for help, or k@zenryokukikai.com"})
+	if len(f) != 0 {
+		t.Fatalf("email must not be flagged (PII is not policed), got %+v", f)
 	}
 }
 
-func TestRejectsTrivialNumberRuns(t *testing.T) {
-	// 16 ones — passes the regex but fails the Luhn / all-same filter
-	f := Scan(Doc{Body: "build hash 1111111111111111"})
-	for _, x := range f {
-		if x.Pattern == "credit_card" {
-			t.Fatalf("trivial run should not match credit_card: %+v", x)
+func TestDoesNotFlagGitSSHRemote(t *testing.T) {
+	// The original false-positive: an SSH remote read as an "email".
+	f := Scan(Doc{Body: "clone with git@github.com:zenryokukikai/lipsync-engine.git"})
+	if len(f) != 0 {
+		t.Fatalf("git@host SSH remote must not be flagged, got %+v", f)
+	}
+}
+
+func TestDoesNotFlagCardLikeOrPhoneOrAccountDigits(t *testing.T) {
+	for _, body := range []string{
+		"use 4242 4242 4242 4242 to test",   // card-like
+		"call +81 90 1234 5678 tomorrow",     // phone
+		"account 1234567890123456 at the bank", // 16-digit run
+		"run id 20260601123045 build 1111111111111111", // timestamps / hashes
+	} {
+		if f := Scan(Doc{Body: body}); len(f) != 0 {
+			t.Fatalf("numeric/PII content must not be flagged: %q → %+v", body, f)
 		}
 	}
 }
@@ -113,25 +109,6 @@ func TestVerdictRejectInEnforceOnly(t *testing.T) {
 	}
 }
 
-func TestLooksLikeCardEdgeCases(t *testing.T) {
-	// Too short (less than 13 digits)
-	if looksLikeCard("123") {
-		t.Fatal("too short should not match")
-	}
-	// Too long (more than 19 digits)
-	if looksLikeCard("12345678901234567890") {
-		t.Fatal("too long should not match")
-	}
-	// Length 16, all-same digit — caught by allSame filter
-	if looksLikeCard("2222222222222222") {
-		t.Fatal("all-same should not match")
-	}
-	// Length 16, Luhn-invalid
-	if looksLikeCard("1234567890123456") {
-		t.Fatal("Luhn-invalid should not match")
-	}
-}
-
 func TestEmptySummary(t *testing.T) {
 	v := Verdict{}
 	if v.Summary() != "" {
@@ -156,11 +133,11 @@ func TestVerdictSummary(t *testing.T) {
 		Findings: []Finding{
 			{Pattern: "github_token"},
 			{Pattern: "github_token"},
-			{Pattern: "email"},
+			{Pattern: "aws_access_key"},
 		},
 	}
 	s := v.Summary()
-	if !strings.Contains(s, "github_token:2") || !strings.Contains(s, "email:1") {
+	if !strings.Contains(s, "github_token:2") || !strings.Contains(s, "aws_access_key:1") {
 		t.Fatalf("unexpected summary: %s", s)
 	}
 }

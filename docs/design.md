@@ -1,10 +1,14 @@
 # Agent Knowledge Base — 設計書
 
-**バージョン**: 0.9
+**バージョン**: 0.10
 **対象実装環境**: Claude Code(自律実装エージェント)
 **読み手**: 実装エージェント、後続の保守者
-**最終更新**: 2026-05-31
+**最終更新**: 2026-06-01
 **変更履歴**: [docs/design-changelog.md](design-changelog.md) 参照
+
+**v0.10 の主な変更(v0.9 からの差分)**:
+
+- §12.3: 書き込み時スキャナを「認証情報漏洩スキャナ」に再定義。email/credit_card/ipv4 の PII 検知を撤去(社内共有でPII検閲は不要、誤検知が使い勝手を壊していた)。secret(鍵/token)ブロックは維持
 
 **v0.9 の主な変更(v0.8 からの差分)**:
 
@@ -950,22 +954,29 @@ kb stats
 
 Phase 1 から有効。全書き込みリクエストを `audit_log` に記録(`request_id` 付き)。
 
-### 12.3 シークレット/PII スキャナ(Phase 1)
+### 12.3 シークレット(認証情報漏洩)スキャナ(Phase 1)
+
+**これは認証情報の漏洩を止めるスキャナであって、PII スキャナではない。**
+コミットされると悪用可能な秘密(クラウド鍵・トークン・秘密鍵)だけを
+検出・拒否する。email / 電話番号 / 銀行口座 / カード番号などの PII は
+検出も拒否もしない。理由: omoikane は社内(単一組織)で共有され、
+プライバシー境界は**プロジェクトスコープの分離**で確保される。書き込み時に
+PII を検閲すると正当な利用(SSH リモート `git@github.com:...` を「email」と
+誤検知して拒否する、連絡先を記録するプロジェクトが何も書けなくなる、等)を
+壊すだけだった。当初は email / credit_card / ipv4 も対象にしていたが、
+2026-06 に撤去(v0.10 changelog 参照)。
 
 書き込み時に以下のパターンを検出:
 
 | パターン名 | 対象 |
 |---|---|
 | `aws_access_key` | `AKIA[0-9A-Z]{16}` |
-| `aws_secret_key` | 40 文字 base64-like の前後文脈 |
+| `aws_secret_key_assignment` | `aws_secret_access_key` 代入 + 40 文字 base64-like |
 | `github_token` | `ghp_*`, `gho_*`, `ghs_*`, `ghr_*`, `github_pat_*` |
-| `slack_token` | `xox[abp]-...` |
+| `slack_token` | `xox[abprs]-...` |
 | `jwt` | `eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+` |
 | `private_key` | `-----BEGIN (RSA|EC|DSA|OPENSSH|PGP) PRIVATE KEY-----` |
 | `generic_api_key` | `(api[_-]?key|secret|token)\s*[:=]\s*['"]?[A-Za-z0-9_-]{20,}` |
-| `email` | RFC 5322 簡易版 |
-| `credit_card` | Luhn 通過の 13-19 桁 |
-| `ipv4_private` | 内部 IP(警告のみ、検知)|
 
 検査対象フィールド: `title` / `body` / `symptom` / `root_cause` / `resolution` / `prohibited` / `attempted_approaches` / `observed_behavior` / `hypotheses` / `metadata`(JSON 文字列化後)。
 

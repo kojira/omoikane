@@ -55,10 +55,16 @@ var patterns = []pattern{
 	// Generic api-key-ish assignment. Require >= 20 chars after the operator,
 	// excluding short config values like `key: abc`.
 	{"generic_api_key", regexp.MustCompile(`(?i)(api[_-]?key|secret|access[_-]?token|auth[_-]?token)\s*[:=]\s*["']?([A-Za-z0-9_\-\.]{20,})["']?`)},
-	{"email", regexp.MustCompile(`\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b`)},
-	// Credit card: 13-19 digit run, must pass Luhn (checked in fnLuhn below).
-	{"credit_card_candidate", regexp.MustCompile(`\b(?:\d[ -]?){13,19}\b`)},
 }
+
+// NOTE: this is a CREDENTIAL-LEAK scanner, not a PII scanner. It blocks
+// secrets that are exploitable if committed (cloud keys, tokens, private
+// keys). It does NOT detect or block PII such as email addresses, phone
+// numbers, bank accounts, or card numbers. omoikane is shared inside one
+// organisation, and per-project scope is the privacy boundary — policing
+// PII at write time only broke legitimate use (e.g. an SSH remote
+// `git@github.com:...` read as an "email", or any project that records
+// contact addresses). See docs/design.md §12.3.
 
 // Scan runs all patterns against all fields and returns findings.
 // Empty findings = clean. The caller maps non-empty results to either:
@@ -91,17 +97,6 @@ func Scan(d Doc) []Finding {
 		for _, p := range patterns {
 			locs := p.re.FindAllStringIndex(f.text, -1)
 			for _, loc := range locs {
-				if p.name == "credit_card_candidate" {
-					raw := f.text[loc[0]:loc[1]]
-					if !looksLikeCard(raw) {
-						continue
-					}
-					out = append(out, Finding{
-						Pattern: "credit_card", Field: f.name,
-						Offset: loc[0], Length: loc[1] - loc[0],
-					})
-					continue
-				}
 				out = append(out, Finding{
 					Pattern: p.name, Field: f.name,
 					Offset: loc[0], Length: loc[1] - loc[0],
@@ -110,48 +105,6 @@ func Scan(d Doc) []Finding {
 		}
 	}
 	return out
-}
-
-// looksLikeCard runs Luhn on the digits-only form. Rejects numbers that are
-// obviously not cards (all same digit, sequential, etc.) to cut false-positives
-// from things like log timestamps or version strings.
-func looksLikeCard(raw string) bool {
-	var digits []byte
-	for i := 0; i < len(raw); i++ {
-		c := raw[i]
-		if c >= '0' && c <= '9' {
-			digits = append(digits, c)
-		}
-	}
-	if len(digits) < 13 || len(digits) > 19 {
-		return false
-	}
-	// Reject trivially repeating digits.
-	allSame := true
-	for i := 1; i < len(digits); i++ {
-		if digits[i] != digits[0] {
-			allSame = false
-			break
-		}
-	}
-	if allSame {
-		return false
-	}
-	// Luhn checksum.
-	sum := 0
-	alt := false
-	for i := len(digits) - 1; i >= 0; i-- {
-		n := int(digits[i] - '0')
-		if alt {
-			n *= 2
-			if n > 9 {
-				n -= 9
-			}
-		}
-		sum += n
-		alt = !alt
-	}
-	return sum%10 == 0
 }
 
 // Verdict bundles the scan result with the configured mode so callers can
