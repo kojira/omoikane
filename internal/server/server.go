@@ -25,11 +25,12 @@ import (
 	"github.com/kojira/omoikane/internal/dashboard"
 	"github.com/kojira/omoikane/internal/enrich"
 	"github.com/kojira/omoikane/internal/store"
+	"github.com/kojira/omoikane/internal/version"
 )
 
-// BuildVersion is overridden at link time. Exposed so cmd/kb-server can set
-// it before calling Run().
-var BuildVersion = "dev"
+// Build/app version live in internal/version (the single source of truth,
+// with the git SHA injected at link time). Kept here as a thin alias so
+// existing references read naturally.
 
 // Run is the program entry point. Returns a process exit code:
 //   - 0 on graceful shutdown
@@ -44,7 +45,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		case "admin-token":
 			return AdminToken(args[1:], stdout, stderr)
 		case "version":
-			fmt.Fprintln(stdout, "kb-server", BuildVersion)
+			fmt.Fprintln(stdout, "kb-server", version.String())
 			return 0
 		case "-h", "--help", "help":
 			Usage(stdout)
@@ -183,7 +184,7 @@ func BuildRouter(st *store.Store, cfg *config.Config, logger *slog.Logger) (http
 		PiiMode:     cfg.PiiMode,
 		Logger:      logger,
 		StartedAt:   time.Now().UTC().Format(time.RFC3339),
-		BuildInfo:   BuildVersion,
+		BuildInfo:   version.String(),
 
 		AuthAllowDomains: cfg.AuthAllowDomains,
 		AuthAllowEmails:  cfg.AuthAllowEmails,

@@ -16,6 +16,7 @@ import (
 	"github.com/kojira/omoikane/internal/config"
 	"github.com/kojira/omoikane/internal/enrich"
 	"github.com/kojira/omoikane/internal/store"
+	"github.com/kojira/omoikane/internal/version"
 )
 
 type Handler struct {
@@ -258,9 +259,11 @@ func (h *Handler) Mount(r chi.Router) {
 
 func (h *Handler) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"status":     "ok",
-		"started_at": h.StartedAt,
-		"build":      h.BuildInfo,
+		"status":      "ok",
+		"started_at":  h.StartedAt,
+		"build":       h.BuildInfo,      // "App (sha)" — full version string
+		"app_version": version.App,      // bare semver
+		"git_sha":     version.Build,    // bare build sha (or "dev")
 	})
 }
 

@@ -44,9 +44,14 @@ COPY . .
 # recompiles the dependency tree from scratch (~70s); with them the
 # incremental build after a source-only change is ~5-10s. The cache
 # survives until you `docker builder prune`.
+# GIT_SHA is passed by the deploy pipeline (docker-compose build arg) so the
+# running binary reports exactly which commit it was built from. Defaults to
+# "dev" for plain local builds.
+ARG GIT_SHA=dev
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
-    CGO_ENABLED=1 go build -tags sqlite_fts5 -ldflags='-s -w' \
+    CGO_ENABLED=1 go build -tags sqlite_fts5 \
+        -ldflags="-s -w -X github.com/kojira/omoikane/internal/version.Build=${GIT_SHA}" \
         -trimpath -o /out/kb-server ./cmd/kb-server
 
 FROM alpine:3.20

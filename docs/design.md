@@ -995,6 +995,20 @@ on にする。on のとき email と Luhn 通過カードを検出する。
 example でも拒否される。その種の entry を書くときは `KB_SECRETS_MODE=warn`
 (記録のみ) か `off` にする。
 
+### 12.3.1 バージョニング
+
+3つの独立したバージョンがある。混同しないこと:
+
+| 何 | 置き場所 | いつ上げる | どこで見る |
+|---|---|---|---|
+| **アプリ semver** | `internal/version.App`（単一の正） | 意味のあるリリース時に手動 | dashboard footer / `GET /v1/health` `app_version` / `kb-server version` |
+| **ビルド SHA** | `internal/version.Build`（ldflags 注入） | 自動（deploy が omoikane submodule の短縮 SHA を渡す） | 同上 `git_sha` |
+| **skill 契約版** | `internal/dashboard.skillVersion` | skill.md の契約が実質変わったとき手動 | `GET /skill.md` の `X-Skill-Version` |
+
+- アプリ semver は design.md の文書バージョンとは別トラック（文書は設計を、semver はビルドを表す）。
+- ビルド SHA は手動 bump を忘れても「何が動いてるか」を常に正確にする保険。`-X github.com/kojira/omoikane/internal/version.Build=<sha>` で注入、未注入なら `dev`。
+- **挙動・契約・スキーマを変える変更では、関係するバージョンを同じ変更内で上げる**（design-discipline）。
+
 ### 12.4 バックアップ
 
 - SQLite を日次 `.dump`、30 日分を別ディスク

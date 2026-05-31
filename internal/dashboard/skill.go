@@ -9,7 +9,7 @@ import (
 // skillVersion is bumped manually when the skill contract changes
 // meaningfully (new required tools, new register flow, etc.). Minor
 // prose edits don't bump it.
-const skillVersion = "0.1.0"
+const skillVersion = "0.2.0"
 
 // agentSkillTmpl is the single, canonical SKILL.md template,
 // served at /skill.md. Earlier the codebase had a separate "human

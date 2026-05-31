@@ -21,6 +21,7 @@ import (
 	"github.com/kojira/omoikane/dist/samples"
 	"github.com/kojira/omoikane/internal/auth"
 	"github.com/kojira/omoikane/internal/store"
+	"github.com/kojira/omoikane/internal/version"
 )
 
 //go:embed templates/*.html templates/*.tmpl
@@ -65,6 +66,9 @@ func newFromFS(s *store.Store, open bool, fsys fs.FS) (*Handler, error) {
 		"renderContent": func(text, token string) template.HTML {
 			return renderContent(text, token, s)
 		},
+		// appVersion lets layout.html's footer show the running version
+		// on every page without threading it through each handler's data.
+		"appVersion": version.String,
 	}
 	pages := map[string]*template.Template{}
 	for _, name := range []string{"home", "project", "entry", "entry_history", "search",
