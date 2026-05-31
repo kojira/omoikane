@@ -74,12 +74,43 @@ with this file; the conventions there apply to curator unchanged.
 
 - **status** — every entry's lifecycle (DRAFT / ACTIVE / SUPERSEDED /
   ARCHIVED / DELETED).
-- **conflict resolution** — when detective surfaces a
-  `relations[conflicts_with]` edge, curator decides which side wins
-  (or whether both are partial and a new synthesis is needed).
+- **conflict resolution** — when detective surfaces a `conflicts_with`
+  relationship, curator decides which side wins (or whether both are
+  partial and a new synthesis is needed).
+- **duplicate resolution** — when detective surfaces a `duplicate_of`
+  relationship, curator picks the canonical entry and proposes
+  superseding the other (or a synthesis when each holds unique
+  content). See "Resolving detective proposals" below.
 - **supersede edges** — proposing `superseded_by` between entries.
 - **review_queue** — the entries flagged by negative engagement /
   feedback signals.
+
+### Resolving detective proposals
+
+Detective does not mutate the graph; it writes its findings as
+**`librarian_meta` DRAFTs with `metadata.kind=relation_proposal`**
+(carrying `proposed` `duplicate_of` / `conflicts_with` / `related`
+edges). In Phase 5 there is no relation edge in the DB yet — the
+DRAFT proposal IS the hand-off. Those proposal DRAFTs reach you
+through your normal backlog (the librarian backlog deliberately keeps
+`librarian_meta` in curator's queue). For each one you examine:
+
+- Read the proposal AND the entries it names (full bodies, not
+  titles).
+- **Confirm or reject the relationship on its merits.** Detective
+  proposes; you are the filter. A proposal you can't substantiate
+  from the entries themselves is a `reject` (record it, with the
+  reason — that signal is how detective's precision improves).
+- For a confirmed `duplicate_of`: pick the **canonical** entry (the
+  richer / more current / better-engaged one) and emit a `supersede`
+  proposal for the other — or `synthesize` if each side holds unique
+  content. For a confirmed `conflicts_with`: `supersede`,
+  `synthesize`, or `coexist` as today.
+
+You still emit your own `librarian_meta` DRAFT with
+`proposed_actions[]`; the detective proposal is your input, your
+resolution DRAFT is your output. Record progress on the proposal
+entry so it leaves your backlog.
 
 ### What you produce
 

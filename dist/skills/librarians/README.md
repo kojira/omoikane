@@ -57,3 +57,10 @@ to a configured agent runtime is `cmd/librarian-runner`. Phase 5 ships a
 - Posts a placeholder chat message announcing "OBSERVING"
 
 The real LLM-call loop is delegated to the agent runtime in Phase 6+.
+
+In the meantime, a librarian can be run today by pointing any
+LLM-tool-loop runtime at a role's bundle and looping it over the
+backlog. The generic, environment-agnostic procedure (mint a
+role-scoped token → register an instance → build a runnable workspace
+that derives from the bundle → validate locally → schedule sessions)
+is documented in **[RUNNING.md](RUNNING.md)**.

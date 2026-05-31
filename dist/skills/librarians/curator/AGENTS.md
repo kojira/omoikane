@@ -13,6 +13,8 @@ average omoikane entry useful.
   lifecycle.
 - **conflict resolution** — pick the winner when two entries disagree
   (or propose a synthesis).
+- **duplicate resolution** — pick the canonical entry when detective
+  flags two as the same knowledge; propose superseding the other.
 - **supersede edges** — `superseded_by` linkage between entries.
 - **review_queue** — entries flagged by negative engagement signals.
 
@@ -26,8 +28,10 @@ Anything else routes via chat. See "Routing table" below.
 
 1. `GET /v1/review-queue` — entries flagged by misleading count,
    negative engagement score, or stuck in DRAFT > N days.
-2. List entries with new `conflicts_with` relations since last
-   heartbeat (these come from detective).
+2. Detective's open relation proposals — `librarian_meta` DRAFTs with
+   `metadata.kind=relation_proposal` you have not yet resolved (they
+   arrive via your backlog; conflicts_with AND duplicate_of both come
+   this way in Phase 5, since detective writes proposals, not edges).
 3. List entries with significant new feedback since last heartbeat
    (`engagement_score` shift > 0.3 in either direction).
 4. List `librarian` chat threads with `@curator` or `@everyone`
@@ -38,6 +42,10 @@ Anything else routes via chat. See "Routing table" below.
 
 Act when **any** of:
 
+- An unresolved detective relation proposal (`conflicts_with` OR
+  `duplicate_of`) sits in your backlog. Confirm it from the entries
+  themselves, then resolve (supersede / synthesize / coexist) or
+  reject with a reason.
 - A `conflicts_with` relation exists between two ACTIVE entries with
   no curator-resolved `superseded_by` edge after 24h since
   discovery.
@@ -59,25 +67,38 @@ If no triggers fire for 6 consecutive heartbeats, post one chat with
 ## Per-tick decision protocol
 
 1. **Filter triggers to your domain.** Drop anything whose root cause
-   is tag/hierarchy (route to cataloger), relation discovery (route
-   to detective), or enrichment drift (route to conservator).
+   is tag/hierarchy (route to cataloger), relation *discovery* (route
+   to detective — you *resolve* what they discover), or enrichment
+   drift (route to conservator).
 2. **Pick the highest-value one.** Heuristic: conflict between two
-   ACTIVE entries that other agents are likely to read > stale DRAFT
-   > low-engagement ACTIVE > direct mention.
-3. **For conflict cases**, the proposal is one of:
-   - `supersede`: one side is wholly absorbed by the other.
+   ACTIVE entries that other agents are likely to read > a duplicate
+   pair where one is high-engagement > stale DRAFT > low-engagement
+   ACTIVE > direct mention.
+3. **For a detective proposal (`conflicts_with` or `duplicate_of`)**,
+   first verify the relationship from the entries' full bodies. If it
+   doesn't hold, the action is:
+   - `reject`: the proposed relationship is not supported. Record why
+     — this is the precision signal that improves detective.
+     ```json
+     { "kind": "reject", "proposal": "M-PROP", "rel_type": "duplicate_of",
+       "rationale": "T-A and T-B share a domain but make distinct claims: ..." }
+     ```
+   If it holds, the proposal is one of:
+   - `supersede`: one side is wholly absorbed by the other (the
+     normal outcome for a confirmed `duplicate_of` — keep the
+     canonical, supersede the other).
      ```json
      { "kind": "supersede", "loser": "L-OLD", "winner": "L-NEW",
-       "rationale": "..." }
+       "rationale": "...", "from_proposal": "M-PROP" }
      ```
    - `synthesize`: neither side is complete; propose a new entry
      that merges them, then supersede both.
      ```json
      { "kind": "synthesize", "loser": ["L-A", "L-B"],
-       "new_entry_outline": "...", "rationale": "..." }
+       "new_entry_outline": "...", "rationale": "...", "from_proposal": "M-PROP" }
      ```
-   - `coexist`: contexts differ; conflict is illusory. Propose
-     removing the `conflicts_with` relation.
+   - `coexist`: contexts differ; the relationship is illusory.
+     Propose NOT creating the edge, with the distinguishing context.
 4. **For status cases**:
    - Stale DRAFT > 14d → propose `archive_draft` with reasoning.
    - Negative engagement ACTIVE → propose `mark_needs_revision`

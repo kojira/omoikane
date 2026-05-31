@@ -11,6 +11,46 @@
 
 ---
 
+## v0.9(2026-05-31)
+
+### 背景
+
+detective を実運用に乗せた結果、提案(`duplicate_of`/`related`/
+`conflicts_with`)を **消費して resolve する curator 側の経路が未設計**
+だと判明。detective bundle は元々 `conflicts_with` の resolution を
+curator に投げる前提だったが、(a) `duplicate_of` の解決アクションが
+curator に無い、(b) Phase 5 では detective がエッジを作らず DRAFT 提案
+しか出さないため、curator が提案を拾う導線が無い、という2つの穴があった。
+
+### 変更点
+
+- §20.2: dedup ループの閉じ方を明記。detective の `relation_proposal`
+  DRAFT は curator の backlog に流れ(librarian_progress が curator に
+  librarian_meta を残す既存挙動)、curator が検証→supersede/synthesize/
+  coexist/reject を DRAFT 提案。**サーバ無改修**。
+- 司書 bundle: curator に duplicate resolution と「detective 提案の消費・
+  reject 記録」を追記。
+
+### 設計判断の根拠
+
+- **提案の運搬は librarian_meta DRAFT のまま、既存 backlog/progress に
+  乗せる**(専用キュー API や chat 通知ではなく)。理由: (1) 新概念ゼロ・
+  サーバ無改修で最もシンプル、(2) 提案が durable な entry として残り、
+  curator の accept/reject が progress に記録される=「提案の受理率」を
+  計測でき detective の精度を継続改善できる。chat は lookup 非対象で揮発的、
+  専用キューは entry と状態二重持ちで、どちらも改善ループ計測を困難にする。
+- 既存の supersede/synthesize/coexist 語彙を duplicate にも流用。新しい
+  解決種別を発明しない。
+
+### 影響範囲
+
+- サーバ実装変更なし(`excludedTypesForRole` が既に curator に
+  librarian_meta を流す設計だった)。
+- curator の runnable workspace をこの設計で実装(リポジトリ外、ローカル
+  検証後)。Phase 計画への影響なし。
+
+---
+
 ## v0.8(2026-05-29)
 
 ### 背景
