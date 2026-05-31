@@ -1,0 +1,31 @@
+#!/bin/bash
+# Example launchd/cron wrapper for the omoikane summarizer librarian.
+# Copy to your workspace, replace the placeholders, make executable.
+#
+# Placeholders:
+#   <NODE_BIN_DIR>  dir holding the `pi` runtime (e.g. ~/.nvm/.../bin)
+#   <WORKSPACE>     absolute path to this workspace dir
+set -euo pipefail
+
+# launchd/cron give a bare environment; set PATH so curl/jq/pi/python resolve.
+export PATH="<NODE_BIN_DIR>:/opt/homebrew/bin:/usr/bin:/bin"
+
+WORKDIR="<WORKSPACE>"
+LOCK="$WORKDIR/.summarizer-session.lock"
+cd "$WORKDIR"
+ts() { date '+%Y-%m-%dT%H:%M:%S'; }
+
+# Single-flight: skip if a prior run is still going.
+if ! mkdir "$LOCK" 2>/dev/null; then
+    echo "$(ts) [skip] a summarizer session is already running"; exit 0
+fi
+trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT
+
+echo "=== $(ts) summarizer START ==="
+# pi reads its model creds from ~/.pi/agent/auth.json (HOME-based);
+# omoikane creds come from .agents/.local/kb-agent.json (NOT via env).
+pi --print --skill .agents/skills/omoikane-summarizer --no-context-files \
+   "Write yesterday's omoikane daily journal (fetch_yesterday.sh, no date arg). Compose a readable themed journal, post ACTIVE, print result line."
+rc=$?
+echo "=== $(ts) summarizer END (rc=$rc) ==="
+exit $rc

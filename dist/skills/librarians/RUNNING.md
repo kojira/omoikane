@@ -140,11 +140,15 @@ Set an instance's status to `stopped` (operator/admin action); each
 tick then heartbeats but does not act — the `backlog_next` helper
 honours it automatically. To fully halt, remove the scheduler entry.
 
-## Reference implementations
+## Reference implementations — copy-paste examples
 
-`cataloger` (per-entry summaries) and `detective` (relation proposals)
-are the two roles wired this way first; their bundles show the
-per-tick contract a workspace batches over. `curator` (resolves
-detective's proposals) follows the same shape. When adding a new role,
-copy the closest existing workspace and swap the bundle + the
-role-specific `post_*` script.
+Complete, runnable, secret-free workspace skeletons for five roles live
+in **[`workspace-example/`](workspace-example/)** (cataloger, detective,
+curator, scout, summarizer) — scripts + session wrapper + LaunchAgent,
+with placeholders for host/path/token. Start there: copy the closest
+role, fill the placeholders, validate locally, schedule. See
+[`workspace-example/README.md`](workspace-example/README.md) for the
+step-by-step.
+
+When adding a NEW role, copy the closest existing example and swap the
+bundle + the role-specific producer script (`post_*` / `fetch_*`).

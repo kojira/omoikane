@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Example LaunchAgent for the omoikane summarizer (daily journal).
+     Runs once each morning (system local time). Copy to
+     ~/Library/LaunchAgents/<LABEL>.plist, replace placeholders. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string><LABEL></string>
+  <key>ProgramArguments</key><array>
+    <string>/bin/bash</string><string><WORKSPACE>/run-session.sh</string>
+  </array>
+  <key>WorkingDirectory</key><string><WORKSPACE></string>
+  <!-- every day at 07:00 local; writes the PREVIOUS day's journal -->
+  <key>StartCalendarInterval</key><dict>
+    <key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer>
+  </dict>
+  <key>RunAtLoad</key><false/>
+  <key>StandardOutPath</key><string><HOME>/Library/Logs/omoikane-summarizer.log</string>
+  <key>StandardErrorPath</key><string><HOME>/Library/Logs/omoikane-summarizer.err.log</string>
+  <key>ProcessType</key><string>Background</string>
+</dict></plist>
