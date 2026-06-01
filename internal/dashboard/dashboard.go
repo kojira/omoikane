@@ -283,6 +283,7 @@ type pageCtx struct {
 	// back so the form preserves user input across navigation.
 	EntriesTotal  int
 	EntriesFilter store.EntryFilter
+	Pagination    *pagination
 }
 
 func (h *Handler) renderCtx(r *http.Request) pageCtx {
@@ -308,7 +309,9 @@ func (h *Handler) home(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	entries, _, err := h.Store.ListEntries(ctx, store.EntryFilter{Limit: 20})
+	const pageSize = 20
+	page := pageParam(r)
+	entries, total, err := h.Store.ListEntries(ctx, store.EntryFilter{Limit: pageSize, Offset: (page - 1) * pageSize})
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -317,6 +320,7 @@ func (h *Handler) home(w http.ResponseWriter, r *http.Request) {
 	pc.Title = "omoikane — home"
 	pc.Projects = ps
 	pc.Entries = entries
+	pc.Pagination = buildPagination(r, total, page, pageSize)
 	h.render(w, "home", pc)
 }
 
@@ -345,13 +349,15 @@ func (h *Handler) entriesList(w http.ResponseWriter, r *http.Request) {
 		Query:             q.Get("q"),
 		IncludeSuperseded: q.Get("include_superseded") == "true",
 	}
-	limit := 100
+	limit := 50
 	if v := q.Get("limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 500 {
 			limit = n
 		}
 	}
+	page := pageParam(r)
 	filter.Limit = limit
+	filter.Offset = (page - 1) * limit
 	entries, total, err := h.Store.ListEntries(r.Context(), filter)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -362,7 +368,61 @@ func (h *Handler) entriesList(w http.ResponseWriter, r *http.Request) {
 	pc.Entries = entries
 	pc.EntriesTotal = total
 	pc.EntriesFilter = filter
+	pc.Pagination = buildPagination(r, total, page, limit)
 	h.render(w, "entries", pc)
+}
+
+// pagination is the data a list page needs to render prev/next controls.
+// PrevURL/NextURL are "" when that direction doesn't exist. The URLs
+// preserve the request's existing query (filters, token) and only swap
+// the page number.
+type pagination struct {
+	Page, Pages, From, To, Total int
+	PrevURL, NextURL             string
+}
+
+// pageParam reads ?page (1-based, default 1, never < 1).
+func pageParam(r *http.Request) int {
+	if n, err := strconv.Atoi(r.URL.Query().Get("page")); err == nil && n > 1 {
+		return n
+	}
+	return 1
+}
+
+// buildPagination computes the prev/next/window for a list of `total`
+// items shown `pageSize` per page at the given 1-based `page`.
+func buildPagination(r *http.Request, total, page, pageSize int) *pagination {
+	if pageSize < 1 {
+		pageSize = 1
+	}
+	pages := (total + pageSize - 1) / pageSize
+	if pages < 1 {
+		pages = 1
+	}
+	if page > pages {
+		page = pages
+	}
+	from := (page-1)*pageSize + 1
+	to := page * pageSize
+	if to > total {
+		to = total
+	}
+	if total == 0 {
+		from = 0
+	}
+	mk := func(p int) string {
+		q := r.URL.Query()
+		q.Set("page", strconv.Itoa(p))
+		return r.URL.Path + "?" + q.Encode()
+	}
+	pg := &pagination{Page: page, Pages: pages, From: from, To: to, Total: total}
+	if page > 1 {
+		pg.PrevURL = mk(page - 1)
+	}
+	if page < pages {
+		pg.NextURL = mk(page + 1)
+	}
+	return pg
 }
 
 // journalList shows the daily journals (summarizer's morning digests),
@@ -382,9 +442,23 @@ func (h *Handler) journalList(w http.ResponseWriter, r *http.Request) {
 			journals = append(journals, e)
 		}
 	}
+	// Paginate the filtered slice (daily journals are sparse — one per
+	// day — so an in-memory window is fine).
+	const pageSize = 30
+	total := len(journals)
+	page := pageParam(r)
+	start := (page - 1) * pageSize
+	if start > total {
+		start = total
+	}
+	end := start + pageSize
+	if end > total {
+		end = total
+	}
 	pc := h.renderCtx(r)
 	pc.Title = "omoikane — journal"
-	pc.Entries = journals
+	pc.Entries = journals[start:end]
+	pc.Pagination = buildPagination(r, total, page, pageSize)
 	h.render(w, "journal", pc)
 }
 

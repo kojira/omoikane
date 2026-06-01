@@ -62,10 +62,8 @@
 
 <p class="muted">
   Showing <strong>{{len .Entries}}</strong> of <strong>{{.EntriesTotal}}</strong> matching entries.
-  {{if .Entries}}{{if (lt (len .Entries) .EntriesTotal)}}
-    <span class="muted">(raise <code>?limit=</code> to see more, max 500)</span>
-  {{end}}{{end}}
 </p>
+{{template "pager" .Pagination}}
 
 {{if .Entries}}
 <table>
@@ -85,6 +83,7 @@
     {{end}}
   </tbody>
 </table>
+{{template "pager" .Pagination}}
 {{else}}
 <div class="empty">No entries match the current filter.</div>
 {{end}}

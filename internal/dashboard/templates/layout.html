@@ -38,3 +38,14 @@
 <footer>omoikane · audit dashboard · <span class="muted">v{{appVersion}}</span></footer>
 </body>
 </html>{{end}}
+
+{{define "pager"}}
+{{if .}}{{if gt .Pages 1}}
+<nav class="pager">
+  {{if .PrevURL}}<a class="pager-link" href="{{.PrevURL}}" rel="prev">← prev</a>
+  {{else}}<span class="pager-link pager-disabled">← prev</span>{{end}}
+  <span class="pager-info">{{.From}}–{{.To}} of {{.Total}} · page {{.Page}}/{{.Pages}}</span>
+  {{if .NextURL}}<a class="pager-link" href="{{.NextURL}}" rel="next">next →</a>
+  {{else}}<span class="pager-link pager-disabled">next →</span>{{end}}
+</nav>
+{{end}}{{end}}{{end}}

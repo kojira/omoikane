@@ -129,6 +129,11 @@ a { color: var(--accent); }
 .body.md input[type=checkbox] { margin-right: 0.4em; }
 .body.md del { color: var(--muted); }
 footer { padding: 1rem; text-align: center; color: var(--muted); font-size: 0.85rem; }
+.pager { display: flex; align-items: center; justify-content: center; gap: 1rem; margin: 1.25rem 0; }
+.pager-link { text-decoration: none; padding: 0.3rem 0.8rem; border: 1px solid var(--border); border-radius: 6px; color: var(--accent); font-size: 0.9rem; }
+.pager-link:hover { background: var(--hover); color: var(--accent-strong); }
+.pager-disabled { color: var(--muted); border-color: var(--hairline); pointer-events: none; opacity: 0.5; }
+.pager-info { font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); }
 .empty { padding: 2rem; text-align: center; color: var(--muted); background: var(--surface);
          border: 1px dashed var(--border); border-radius: 6px; }
 .banner { padding: 0.6rem 1rem; background: var(--hover); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 1rem; }
