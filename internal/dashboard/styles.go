@@ -367,11 +367,13 @@ a.attachment-file:hover { background: var(--hover); }
   padding: 2.5rem 2.75rem;
   margin: 0 auto;
 }
-.journal-sheet .journal-date {
-  font-family: var(--font-mono); font-size: 0.85rem;
-  color: var(--muted); letter-spacing: 0.04em;
+.journal-sheet h1.journal-date {
+  font-family: var(--font-serif); margin: 0 0 0.15rem;
 }
-.journal-sheet h1 { margin-top: 0.3rem; }
+.journal-sheet .journal-written {
+  font-family: var(--font-mono); font-size: 0.8rem;
+  letter-spacing: 0.03em; margin-bottom: 1.4rem;
+}
 @media (max-width: 640px) { .journal-sheet { padding: 1.5rem 1.25rem; } }
 
 /* Journal index: a list of mornings. */
@@ -388,6 +390,11 @@ a.attachment-file:hover { background: var(--hover); }
 .journal-list .j-title { font-family: var(--font-serif); font-size: 1.05rem; }
 .journal-list a { text-decoration: none; }
 .journal-list a:hover .j-title { text-decoration: underline; }
+.journal-list .j-written {
+  display: block; font-family: var(--font-mono); font-size: 0.78rem;
+  letter-spacing: 0.03em; margin-top: 0.2rem; margin-left: 7.7rem;
+}
+@media (max-width: 640px) { .journal-list .j-written { margin-left: 0; } }
 
 /* "This morning" callout on home. */
 .journal-today {

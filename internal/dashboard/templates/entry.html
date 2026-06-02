@@ -6,8 +6,8 @@
   <a href="/journal{{if $.Token}}?token={{urlq $.Token}}{{end}}">← Journal</a>
 </nav>
 <article class="journal-sheet reading">
-  <div class="journal-date">{{journalDate .}}</div>
-  <h1>{{.Title}}</h1>
+  <h1 class="journal-date">{{journalDate .}} のできごと</h1>
+  <div class="journal-written muted">📝 {{journalPosted .}} に作成</div>
   <div class="body md">{{renderContent .Body $.Token}}</div>
 </article>
 {{end}}

@@ -96,6 +96,14 @@ func newFromFS(s *store.Store, open bool, fsys fs.FS) (*Handler, error) {
 			}
 			return e.CreatedAt.Format("2006-01-02")
 		},
+		// journalPosted shows when a journal was actually written, in JST,
+		// so a reader can tell "this morning's journal" from an older one —
+		// the journal *covers* the previous day but is *posted* the next
+		// morning, and the index date alone hides that distinction.
+		"journalPosted": func(e *store.Entry) string {
+			jst := time.FixedZone("JST", 9*60*60)
+			return e.CreatedAt.In(jst).Format("2006-01-02 15:04")
+		},
 	}
 	pages := map[string]*template.Template{}
 	for _, name := range []string{"home", "journal", "project", "entry", "entry_history", "search",

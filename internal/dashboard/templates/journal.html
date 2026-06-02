@@ -16,8 +16,9 @@ readable entry.</p>
   <li>
     <a href="/entries/{{.ID}}{{if $.Token}}?token={{urlq $.Token}}{{end}}">
       <span class="j-date">{{journalDate .}}</span>
-      <span class="j-title">{{.Title}}</span>
+      <span class="j-title">この日のできごと</span>
     </a>
+    <span class="j-written muted">📝 {{journalPosted .}} に作成</span>
   </li>
   {{end}}
 </ul>
