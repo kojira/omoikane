@@ -79,10 +79,15 @@ Once per day (early morning), write a single journal covering the
   (numbers/conditions when the source gives them), then which omoikane
   project it touches. **Do not repeat the paper title** — the link
   carries it; the title must not be the longest thing in the line.
-- **New knowledge**: traps / lessons / decisions / incidents / design
-  created yesterday — what the team actually learned or decided.
-  **Group by `project_id`** (one subheading per project) so each
-  insight is anchored to the project it came from.
+- **New knowledge**: grouped by `project_id` (one subheading per
+  project). **Do not list every entry** — that catalog is what's hard
+  to read. For each project write a **1–3 sentence synthesis one level
+  above the entries**: what changed or was decided, where it's heading,
+  and **how the project is going — smooth progress, or lots of problems
+  / churn / re-deciding?** (read it from the entry mix: many traps /
+  incidents / "stop and redo" decisions = struggling; clean lessons /
+  decisions / designs = steady). Back it with the key `[[T-XXX]]`
+  links. The reader should grasp each project's state at a glance.
 - **Librarian activity**: a short tally — N cataloger summaries, M
   detective relation proposals, K curator resolutions — so a reader
   sees the KB's pulse without opening every DRAFT.

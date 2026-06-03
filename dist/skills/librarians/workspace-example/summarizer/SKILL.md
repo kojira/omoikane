@@ -40,11 +40,16 @@ a digest a human reads over coffee.
      conditions) when stated, then which omoikane project it could
      move. **Do NOT repeat the paper title** — the link carries it; the
      title must not be the longest thing in the line.
-  2. **内部の新知見 / New knowledge** — traps/lessons/decisions/
-     incidents/design created yesterday: what the team learned/decided.
-     **Group these by `project_id`** (one `###` subheading per project)
-     so a reader sees at a glance which project each insight belongs to.
-     Within a project, lead with the highest-signal item.
+  2. **内部の新知見 / New knowledge** — grouped by `project_id` (one
+     `###` per project). **Do NOT list every entry** — that catalog is
+     what's hard to read. For each project write a **1–3 sentence
+     synthesis one level above the entries**: what changed or was
+     decided, where it's heading, and **how the project is going —
+     smooth progress, or lots of problems / churn / re-deciding?** (read
+     it from the entry mix: many traps/incidents/"stop and redo" = struggling;
+     clean lessons/decisions/designs = steady). Back it with the key
+     `[[T-XXX]]` links. The reader should grasp each project's state at
+     a glance, not face a list to decode.
   3. **司書の動き / Librarian activity** — a short tally (N cataloger
      summaries, M detective relation proposals, K curator resolutions)
      so the reader feels the KB's pulse without opening DRAFTs.
@@ -87,11 +92,12 @@ findings, also include the source URL as a normal link. Structure:
 ## 内部の新知見
 
 ### <project_id>
-- [[T-XXXX]] (<type>) <title> — <what was learned/decided, 1 line>
-- ...
+<1–3 文のメタ要約:何が変わり/決まり、どこへ向かうか、そして **順調か難航か**
+(問題ややり直しが多発していないか、きれいに前進しているか)。個別の羅列でなく
+束ねた筋。根拠となる主要エントリだけ [[T-XXX]] でリンク。>
 
 ### <another project_id>
-- [[L-XXXX]] (<type>) <title> — <...>
+<同様に、状態が一目で分かるメタ要約。>
 
 ## 司書の動き
 - cataloger: N summaries · detective: M relation proposals · curator: K resolutions · scout: P findings
