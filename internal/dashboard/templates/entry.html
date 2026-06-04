@@ -128,14 +128,14 @@
 {{if .EntrySymptoms}}
 <div class="field"><div class="label">症状 (symptoms)</div>
   <div class="rev-chips">
-    {{range .EntrySymptoms}}<a class="rev-chip" href="/lookup?q={{urlq .}}&amp;mode=symptom{{if $.Token}}&amp;token={{urlq $.Token}}{{end}}">{{.}}</a>{{end}}
+    {{range .EntrySymptoms}}<a class="rev-chip" href="/lookup?q={{.}}&amp;mode=symptom{{if $.Token}}&amp;token={{$.Token}}{{end}}">{{.}}</a>{{end}}
   </div>
 </div>
 {{end}}
 {{if .EntryTriggers}}
 <div class="field"><div class="label">トリガ (triggers)</div>
   <div class="rev-chips">
-    {{range .EntryTriggers}}<a class="rev-chip" href="/lookup?q={{urlq .Phrase}}&amp;mode=trigger{{if .Domain}}&amp;domain={{urlq .Domain}}{{end}}{{if $.Token}}&amp;token={{urlq $.Token}}{{end}}">{{.Phrase}}{{if .Domain}} <span class="rev-domain">{{.Domain}}</span>{{end}}</a>{{end}}
+    {{range .EntryTriggers}}<a class="rev-chip" href="/lookup?q={{.Phrase}}&amp;mode=trigger{{if .Domain}}&amp;domain={{.Domain}}{{end}}{{if $.Token}}&amp;token={{$.Token}}{{end}}">{{.Phrase}}{{if .Domain}} <span class="rev-domain">{{.Domain}}</span>{{end}}</a>{{end}}
   </div>
 </div>
 {{end}}
