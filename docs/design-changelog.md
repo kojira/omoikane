@@ -51,6 +51,34 @@
 
 ---
 
+## v0.16(2026-06-04)
+
+### 背景
+
+v0.15 で復活させた逆引き(`/lookup` の `symptoms_index`/`triggers_index`)を運用し始めたところ、kojira-san から「これは一覧性の低い index になっている。元タイトルといらない情報が混ざっていて主役が不明。ユースケース名を主役にして、そこに記事をぶら下げる形にしてほしい。ユースケースは日英両方で表示切替できるように」とのフィードバック。短文化や trunc は応急処置で、構造そのものが間違っていた:句は記事に従属するため一覧の主役にならず、横断ナビにもならない。
+
+### 変更点
+
+- **UseCase を第一級リソース化**(§23.15.4):`use_cases`(id, slug UNIQUE, name_ja, name_en, description_ja/en, domain, source, ts)+ `use_case_entries`(M:N)。新 API: `POST /v1/use_cases`(upsert by slug)、`GET /v1/use_cases?lang=ja|en&project=&q=&page=`、`GET /v1/use_cases/{id}`、`POST/DELETE /v1/use_cases/{id}/entries`、`GET /v1/entries/{id}/use_cases`。
+- **indexer SKILL を UseCase 起点に再構築**: 句を書く動作から「エントリを読む → 既存 UseCase を検索 → マッチで link / なし で upsert+link」へ。slug は en_name から kebab-case 自動生成、UNIQUE で並行 indexer の重複を防止。
+- **Dashboard `/lookup` を UseCase 主役の UI に再構築**: 一覧は UseCase 名(現行言語)+ ドメイン + 件数、1段クリックで関連エントリ展開。記事タイトルは副次的。エントリ詳細の「🔎 逆引き索引」も「所属 UseCase」のチップに置換。
+- **日英表示切替**: `?lang=ja|en` + Cookie。ナビにトグル。
+- 既存 `symptoms_index`/`triggers_index` + `/v1/lookup/by-symptom|trigger` は API 互換のため当面残す(エージェント既存利用 + 後で縮退判断)。
+
+### 設計判断の根拠
+
+- **構造変更こそ長期解**: チップ trunc や本文引用禁止のような応急対応では、根本「句が記事従属」の問題は解けない。第一級リソース化で「UseCase の一覧」「UseCase ↔ 記事の M:N ナビ」「日英表示切替」が自然に実現する。
+- **二言語を構造で担保**: `name_ja` + `name_en` を別カラムにし、UI 切替 + cross-language lookup の両方を支える。LLM が両言語で書く設計と一致(§23.15.1 の英日併記方針の延長)。
+- **slug UNIQUE による idempotency**: 複数 indexer が並行で同じ問題類型を見つけても、`slug` 一意で重複が起きず upsert で集約される。`Phrase` の比較に頼らないので堅牢。
+- **Phase5 直接書きの 3 例目**: ジャーナル(§23.15)、症状/トリガ index(§23.15.3)に続き、UseCase 行も派生メタ(再生成可能・本文不変)として直接書きで扱う。一貫した規律。
+
+### 影響範囲
+
+- 既存 `symptoms_index`/`triggers_index` と関連 API・store 関数・ダッシュボード `/lookup` の `by-symptom` 検索結果セクションは互換維持(削除しない)。
+- 既存 indexer は SKILL 改修と再起動が必要。蓄積した症状/トリガ行は新 UseCase 体系には自動移行しない(`/v1/lookup/by-symptom` 検索でのみ使われる)。新方式での蓄積は indexer 再起動後から開始。
+
+---
+
 ## v0.15(2026-06-04)
 
 ### 背景
