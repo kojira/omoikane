@@ -123,8 +123,19 @@
 </table>
 {{end}}
 
+{{if .EntryUseCases}}
+<h2>🔎 所属ユースケース <span class="muted" style="font-size:0.7em;font-weight:normal;">このエントリが扱う問題類型(indexer 供給)</span></h2>
+<div class="rev-chips">
+  {{range .EntryUseCases}}
+  <a class="rev-chip" href="{{navURL (print "/use_cases/" .Slug) $.Token $.Lang}}" title="{{.NameJA}} / {{.NameEN}}">
+    {{if eq $.Lang "en"}}{{.NameEN}}{{else}}{{.NameJA}}{{end}}{{if .Domain}} <span class="rev-domain">{{.Domain}}</span>{{end}}
+  </a>
+  {{end}}
+</div>
+{{end}}
+
 {{if or .EntrySymptoms .EntryTriggers}}
-<h2>🔎 逆引き索引 <span class="muted" style="font-size:0.7em;font-weight:normal;">このエントリに繋がる症状 / トリガ(indexer 供給)</span></h2>
+<h2>🩹 症状 / トリガ <span class="muted" style="font-size:0.7em;font-weight:normal;">legacy 逆引き(indexer 初期版)</span></h2>
 {{if .EntrySymptoms}}
 <div class="field"><div class="label">症状 (symptoms)</div>
   <div class="rev-chips">

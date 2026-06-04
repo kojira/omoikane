@@ -111,6 +111,14 @@ func (h *Handler) Mount(r chi.Router) {
 			r.With(auth.RequireScope("write")).Delete("/entries/{id}", h.deleteEntry)
 			r.With(auth.RequireScope("write")).Post("/entries/{id}/index", h.putEntryIndex)
 
+			// UseCases — first-class reverse-lookup resource (§23.15.4).
+			r.With(auth.RequireScope("read")).Get("/use_cases", h.listUseCases)
+			r.With(auth.RequireScope("read")).Get("/use_cases/{ref}", h.getUseCase)
+			r.With(auth.RequireScope("write")).Post("/use_cases", h.upsertUseCase)
+			r.With(auth.RequireScope("write")).Post("/use_cases/{ref}/entries", h.linkUseCaseEntry)
+			r.With(auth.RequireScope("write")).Delete("/use_cases/{ref}/entries/{entryID}", h.unlinkUseCaseEntry)
+			r.With(auth.RequireScope("read")).Get("/entries/{id}/use_cases", h.listEntryUseCases)
+
 			r.With(auth.RequireScope("read")).Post("/search", h.search)
 
 			// Lookups (Phase 2 reverse-index endpoints).

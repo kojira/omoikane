@@ -1,0 +1,39 @@
+{{define "content"}}
+<nav class="subnav">
+  <a href="{{navURL "/lookup" .Token .Lang}}">← Lookup</a>
+</nav>
+
+{{with .UseCase}}
+<h1 class="uc-detail-name">
+  {{if eq $.Lang "en"}}{{.NameEN}}{{else}}{{.NameJA}}{{end}}
+</h1>
+<p class="uc-detail-altname muted">
+  {{if eq $.Lang "en"}}{{.NameJA}}{{else}}{{.NameEN}}{{end}}
+  {{if .Domain}}· <span class="badge">{{.Domain}}</span>{{end}}
+  · <span class="muted">slug: <code>{{.Slug}}</code></span>
+</p>
+{{$desc := .DescriptionJA}}{{if eq $.Lang "en"}}{{$desc = .DescriptionEN}}{{end}}
+{{if $desc}}<p class="uc-detail-desc reading">{{$desc}}</p>{{end}}
+{{end}}
+
+<h2>関連エントリ</h2>
+{{if .Entries}}
+<table>
+  <thead><tr><th>ID</th><th>Type</th><th>Status</th><th>Title</th><th>Project</th></tr></thead>
+  <tbody>
+    {{range .Entries}}
+    <tr>
+      <td><span class="badge">{{.ID}}</span></td>
+      <td><span class="badge">{{.Type}}</span></td>
+      <td><span class="badge badge-status-{{.Status}}">{{.Status}}</span></td>
+      <td><a href="/entries/{{.ID}}{{if $.Token}}?token={{urlq $.Token}}{{end}}">{{.Title}}</a></td>
+      <td class="muted">{{.ProjectID}}</td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{template "pager" .Pagination}}
+{{else}}
+<div class="empty">関連エントリがまだありません。</div>
+{{end}}
+{{end}}

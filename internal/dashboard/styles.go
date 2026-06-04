@@ -160,6 +160,29 @@ footer { padding: 1rem; text-align: center; color: var(--muted); font-size: 0.85
 .rev-tag { font-size: 0.78rem; color: var(--muted); margin-right: 0.3rem; min-width: 4.2rem; display: inline-block; }
 .rev-more { font-size: 0.78rem; align-self: center; padding: 0.2rem 0.4rem; }
 .rev-meta { font-family: var(--font-mono); font-size: 0.75rem; margin-top: 0.45rem; }
+
+/* UseCase browse list (/lookup default mode) — name is the headline. */
+.uc-list { list-style: none; padding: 0; margin: 1rem 0 1.5rem; }
+.uc-row { padding: 1rem 0.2rem; border-bottom: 1px solid var(--hairline); }
+.uc-row:last-child { border-bottom: none; }
+.uc-row-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.5rem; }
+.uc-name { font-family: var(--font-serif); font-size: 1.25rem; text-decoration: none; color: var(--fg); }
+.uc-name:hover { color: var(--accent-strong); text-decoration: underline; }
+.uc-altname { font-size: 0.9rem; }
+.uc-count { margin-left: auto; font-family: var(--font-mono); font-size: 0.8rem; }
+.uc-desc { margin: 0.35rem 0 0.3rem; color: var(--fg); }
+.uc-samples { list-style: none; padding: 0.4rem 0 0 1rem; margin: 0; border-left: 2px solid var(--hairline); }
+.uc-samples li { font-size: 0.88rem; padding: 0.15rem 0; }
+.uc-samples a { text-decoration: none; color: var(--fg); }
+.uc-samples a:hover { color: var(--accent-strong); }
+
+/* UseCase detail page */
+.uc-detail-name { font-family: var(--font-serif); margin-bottom: 0.1rem; }
+.uc-detail-altname { font-size: 0.9rem; margin-top: 0; }
+.uc-detail-desc { max-width: 70ch; margin: 0.6rem 0 1.2rem; }
+
+/* Language toggle in the header */
+.lang-toggle { font-size: 0.85rem; }
 .pager-info { font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); }
 .empty { padding: 2rem; text-align: center; color: var(--muted); background: var(--surface);
          border: 1px dashed var(--border); border-radius: 6px; }

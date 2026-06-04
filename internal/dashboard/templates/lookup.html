@@ -1,25 +1,58 @@
 {{define "content"}}
 <h1>🔎 Lookup</h1>
 <p class="muted reading">
-  逆引き — 症状やトリガ語を入れると、それに繋がるエントリを返します。
-  本文の全文検索ではなく、indexer が各エントリに付けた
-  <em>症状</em> / <em>トリガ</em> 句に当てます。
+  ユースケース起点で omoikane の知識を辿る — 問題類型(UseCase)を主役に並べ、
+  各 UseCase に関連エントリがぶら下がります。
 </p>
 
 <form method="get" action="/lookup" class="lookup-form">
   {{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}
-  <input type="text" name="q" value="{{.Query}}" placeholder="例: 口の動きが鈍い / training resume noise" autofocus>
+  <input type="text" name="q" value="{{.Query}}" placeholder="例: 口の動きが弱い / mouth articulation" autofocus>
   <select name="mode">
-    <option value="symptom" {{if eq .LookupMode "symptom"}}selected{{end}}>症状 (by-symptom)</option>
-    <option value="trigger" {{if eq .LookupMode "trigger"}}selected{{end}}>トリガ (by-trigger)</option>
+    <option value="use_case" {{if eq .LookupMode "use_case"}}selected{{end}}>ユースケース</option>
+    <option value="symptom"  {{if eq .LookupMode "symptom"}}selected{{end}}>症状 (legacy)</option>
+    <option value="trigger"  {{if eq .LookupMode "trigger"}}selected{{end}}>トリガ (legacy)</option>
   </select>
   <input type="text" name="domain" value="{{.LookupDomain}}" placeholder="domain (任意)" class="lookup-domain">
   <button type="submit">引く</button>
 </form>
 
-{{if .Query}}
+{{if eq .LookupMode "use_case"}}
+  {{if .Query}}<p class="muted">クエリ <code>{{.Query}}</code> でユースケース名を絞り込み中</p>{{end}}
+  {{if .UseCaseList}}
+  <ul class="uc-list">
+    {{range .UseCaseList}}
+    <li class="uc-row">
+      <div class="uc-row-head">
+        {{if .Domain}}<span class="badge">{{.Domain}}</span>{{end}}
+        <a class="uc-name" href="{{navURL (print "/use_cases/" .Slug) $.Token $.Lang}}">
+          {{if eq $.Lang "en"}}{{.NameEN}}{{else}}{{.NameJA}}{{end}}
+        </a>
+        <span class="uc-altname muted">
+          {{if eq $.Lang "en"}}{{.NameJA}}{{else}}{{.NameEN}}{{end}}
+        </span>
+        <span class="uc-count muted">{{.EntryCount}} entries</span>
+      </div>
+      {{$desc := .DescriptionJA}}{{if eq $.Lang "en"}}{{$desc = .DescriptionEN}}{{end}}
+      {{if $desc}}<div class="uc-desc">{{$desc}}</div>{{end}}
+      {{if .SampleEntries}}
+      <ul class="uc-samples">
+        {{range .SampleEntries}}
+        <li><a href="/entries/{{.EntryID}}{{if $.Token}}?token={{urlq $.Token}}{{end}}"><span class="badge">{{.Type}}</span> {{.Title}}</a> <span class="muted">— {{.ProjectID}}</span></li>
+        {{end}}
+      </ul>
+      {{end}}
+    </li>
+    {{end}}
+  </ul>
+  {{template "pager" .Pagination}}
+  {{else}}
+  <div class="empty">該当するユースケースがありません(indexer が90分毎にカバレッジを広げています)。</div>
+  {{end}}
+{{else}}
+  {{/* Legacy phrase modes — back-compat */}}
   <p class="muted">
-    <code>{{.LookupMode}}</code>: <code>{{.Query}}</code>{{if .LookupDomain}} / domain <code>{{.LookupDomain}}</code>{{end}}
+    <code>{{.LookupMode}}</code> モード(legacy): <code>{{.Query}}</code>
   </p>
   {{if .LookupRows}}
     <table>
@@ -36,42 +69,10 @@
         {{end}}
       </tbody>
     </table>
+  {{else if .Query}}
+    <div class="empty">該当なし。</div>
   {{else}}
-    <div class="empty">該当なし。まだ index されていないエントリかもしれません(indexer が90分毎にカバレッジを広げています)。</div>
-  {{end}}
-{{else}}
-  <h2>逆引き済みの記事 <span class="muted" style="font-size:0.7em;font-weight:normal;">最近 index された順 — 「どんな問題で引けるか」を主役に</span></h2>
-  {{if .IndexedList}}
-  <ul class="rev-list">
-    {{range .IndexedList}}
-    <li class="rev-row">
-      <div class="rev-row-head">
-        <span class="badge">{{.ProjectID}}</span>
-        <span class="badge">{{.Type}}</span>
-        <a class="rev-title" href="/entries/{{.EntryID}}{{if $.Token}}?token={{urlq $.Token}}{{end}}">{{.Title}}</a>
-        <span class="rev-id muted">{{.EntryID}}</span>
-      </div>
-      {{if .SampleSymptoms}}
-      <div class="rev-chips rev-chips-sym">
-        <span class="rev-tag">🩹 症状</span>
-        {{range .SampleSymptoms}}<a class="rev-chip" href="/lookup?q={{.}}&amp;mode=symptom{{if $.Token}}&amp;token={{$.Token}}{{end}}" title="{{.}}">{{trunc . 50}}</a>{{end}}
-        {{if gt .Symptoms (len .SampleSymptoms)}}<span class="rev-more muted">+{{minus .Symptoms (len .SampleSymptoms)}}</span>{{end}}
-      </div>
-      {{end}}
-      {{if .SampleTriggers}}
-      <div class="rev-chips rev-chips-trg">
-        <span class="rev-tag">🎯 トリガ</span>
-        {{range .SampleTriggers}}<a class="rev-chip" href="/lookup?q={{.Phrase}}&amp;mode=trigger{{if .Domain}}&amp;domain={{.Domain}}{{end}}{{if $.Token}}&amp;token={{$.Token}}{{end}}" title="{{.Phrase}}">{{trunc .Phrase 50}}{{if .Domain}} <span class="rev-domain">{{.Domain}}</span>{{end}}</a>{{end}}
-        {{if gt .Triggers (len .SampleTriggers)}}<span class="rev-more muted">+{{minus .Triggers (len .SampleTriggers)}}</span>{{end}}
-      </div>
-      {{end}}
-      <div class="rev-meta muted">最終 index: {{.LastIndexed}}</div>
-    </li>
-    {{end}}
-  </ul>
-  {{template "pager" .Pagination}}
-  {{else}}
-  <div class="empty">まだ逆引き index されたエントリがありません(indexer が90分毎に増やします)。上の検索ボックスで症状/トリガを直接引くこともできます。</div>
+    <div class="empty">症状またはトリガ語を入れて「引く」(クエリ無しのデフォルト表示はユースケースモードに移動しました)。</div>
   {{end}}
 {{end}}
 {{end}}

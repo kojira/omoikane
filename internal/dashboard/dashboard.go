@@ -57,6 +57,25 @@ func newFromFS(s *store.Store, open bool, fsys fs.FS) (*Handler, error) {
 		"trunc":       trunc,
 		"urlq":        url.QueryEscape,
 		"minus":       func(a, b int) int { return a - b },
+		"langSwitch":  langSwitch,
+		// navURL builds a safe template.URL for an internal nav link with
+		// optional token + lang query params. Sidesteps html/template's URL-
+		// context analyzer (which rejects dynamic values in {{if}}-built
+		// query strings as ambiguous). path must be a static prefix; the
+		// caller threads token and lang through here.
+		"navURL": func(path, token, lang string) template.URL {
+			qs := url.Values{}
+			if token != "" {
+				qs.Set("token", token)
+			}
+			if lang != "" {
+				qs.Set("lang", lang)
+			}
+			if len(qs) == 0 {
+				return template.URL(path)
+			}
+			return template.URL(path + "?" + qs.Encode())
+		},
 		"deref":       deref,
 		"wikiLinks":   wikiLinks,
 		"chatContent": chatContent,
@@ -109,7 +128,7 @@ func newFromFS(s *store.Store, open bool, fsys fs.FS) (*Handler, error) {
 	pages := map[string]*template.Template{}
 	for _, name := range []string{"home", "journal", "project", "entry", "entry_history", "search",
 		"review_queue", "clusters", "cluster", "situations", "situation",
-		"browse", "browse_node", "index", "lookup", "entries",
+		"browse", "browse_node", "index", "lookup", "use_case", "entries",
 		"chat_threads", "chat_thread", "login", "claim", "agents", "profile",
 		"members", "member_claim"} {
 		t, err := template.New(name).Funcs(funcs).ParseFS(fsys,
@@ -157,6 +176,7 @@ func (h *Handler) Mount(r chi.Router) {
 		// ?token= bookmark.
 		r.Use(auth.SessionCookieToBearer(sessionCookieName))
 		r.Use(auth.AllowQueryTokenForGET)
+		r.Use(persistLangCookie)
 		if !h.Open {
 			mw := &auth.Middleware{S: h.Store}
 			// Order: browserAuthRedirect outer, Authenticate inner.
@@ -183,6 +203,7 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Get("/browse/{id}", h.browseNodePage)
 		r.Get("/index", h.indexPage)
 	r.Get("/lookup", h.lookupPage)
+	r.Get("/use_cases/{ref}", h.useCasePage)
 		r.Get("/chat", h.chatThreadsPage)
 		r.Get("/chat/{id}", h.chatThreadPage)
 		r.Get("/agents", h.agentsPage)
@@ -217,6 +238,8 @@ type pageCtx struct {
 	AsOf     string
 	Token    string
 	Open     bool
+	Lang     string // "ja" | "en" — display language for bilingual content
+
 	Projects []*store.Project
 	Project  *store.Project
 	Entries  []*store.Entry
@@ -249,11 +272,14 @@ type pageCtx struct {
 	LookupMode   string // "symptom" | "trigger"
 	LookupDomain string
 	LookupRows   []lookupRow
-	IndexedList  []*store.IndexedEntrySummary // browse list when no query
+	IndexedList  []*store.IndexedEntrySummary // browse list when no query (legacy)
+	UseCaseList  []*store.UseCaseSummary      // new browse list — UseCase-first
 
 	// Entry page — this entry's reverse-lookup index (symptom/trigger → here)
 	EntrySymptoms []string
 	EntryTriggers []store.IndexedTrigger
+	EntryUseCases []*store.EntryUseCase // UseCases this entry belongs to
+	UseCase       *store.UseCase         // for /use_cases/{ref} detail page
 
 	// Phase 5 — chat
 	ChatThreads      []*store.ChatThread
@@ -310,6 +336,7 @@ func (h *Handler) renderCtx(r *http.Request) pageCtx {
 	pc := pageCtx{
 		Open:  h.Open,
 		Token: r.URL.Query().Get("token"),
+		Lang:  resolveLang(r),
 	}
 	// Populate Me from the request auth context so every page can show
 	// the signed-in user in the header. Falls through silently when
@@ -320,6 +347,47 @@ func (h *Handler) renderCtx(r *http.Request) pageCtx {
 		}
 	}
 	return pc
+}
+
+// resolveLang picks the display language from ?lang= (which also persists
+// into a cookie so subsequent navigation keeps the choice), then the cookie,
+// then defaults to Japanese.
+func resolveLang(r *http.Request) string {
+	if q := r.URL.Query().Get("lang"); q == "ja" || q == "en" {
+		return q
+	}
+	if c, err := r.Cookie("lang"); err == nil && (c.Value == "ja" || c.Value == "en") {
+		return c.Value
+	}
+	return "ja"
+}
+
+// langSwitch returns the language to switch TO from the current one.
+func langSwitch(cur string) string {
+	if cur == "ja" {
+		return "en"
+	}
+	return "ja"
+}
+
+// persistLangCookie middleware: when a request arrives with ?lang=ja|en,
+// write a cookie so subsequent navigation keeps the choice without having
+// to re-thread ?lang= through every link. Idempotent — only writes when
+// the query overrides.
+func persistLangCookie(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if q := r.URL.Query().Get("lang"); q == "ja" || q == "en" {
+			http.SetCookie(w, &http.Cookie{
+				Name:     "lang",
+				Value:    q,
+				Path:     "/",
+				MaxAge:   60 * 60 * 24 * 365, // a year
+				HttpOnly: false,              // readable by client JS if useful
+				SameSite: http.SameSiteLaxMode,
+			})
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (h *Handler) home(w http.ResponseWriter, r *http.Request) {
@@ -574,6 +642,10 @@ func (h *Handler) entry(w http.ResponseWriter, r *http.Request) {
 	if trigs, tErr := h.Store.EntryTriggers(r.Context(), id); tErr == nil {
 		pc.EntryTriggers = trigs
 	}
+	// UseCases this entry belongs to (chips on the entry page).
+	if ucs, uErr := h.Store.ListEntryUseCases(r.Context(), id); uErr == nil {
+		pc.EntryUseCases = ucs
+	}
 	h.render(w, "entry", pc)
 }
 
@@ -771,6 +843,41 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 	h.render(w, "search", pc)
 }
 
+// useCasePage shows one UseCase and a paginated list of its linked entries.
+func (h *Handler) useCasePage(w http.ResponseWriter, r *http.Request) {
+	ref := chi.URLParam(r, "ref")
+	var (
+		uc  *store.UseCase
+		err error
+	)
+	if strings.HasPrefix(ref, "U-") {
+		uc, err = h.Store.GetUseCase(r.Context(), ref)
+	} else {
+		uc, err = h.Store.GetUseCaseBySlug(r.Context(), ref)
+	}
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	const pageSize = 30
+	page := pageParam(r)
+	entries, total, eErr := h.Store.ListUseCaseEntries(r.Context(), uc.ID, pageSize, (page-1)*pageSize)
+	if eErr != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	pc := h.renderCtx(r)
+	pc.Title = "omoikane — " + uc.NameJA + " / " + uc.NameEN
+	pc.UseCase = uc
+	pc.Entries = entries
+	pc.Pagination = buildPagination(r, total, page, pageSize)
+	h.render(w, "use_case", pc)
+}
+
 // lookupRow is one reverse-lookup hit, enriched with the entry's title/type
 // for display (LookupHit itself only carries the id + matched phrase).
 type lookupRow struct {
@@ -781,16 +888,19 @@ type lookupRow struct {
 	Source  string // "rule" | "fts"
 }
 
-// lookupPage is the human view of the reverse-lookup index the indexer fills:
-// type a symptom or a trigger phrase, get the entries it leads to. This is the
-// dashboard counterpart of /v1/lookup/by-symptom|trigger.
+// lookupPage is the UseCase-first browse / search view (design.md §23.15.4).
+// Default mode: list use cases (most-recently-updated first, paginated). When
+// the user types a query, name_ja/name_en LIKE matching filters the list.
+// The legacy symptom/trigger modes are still reachable via ?mode=symptom|trigger
+// for back-compat.
 func (h *Handler) lookupPage(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	mode := r.URL.Query().Get("mode")
-	if mode != "trigger" {
-		mode = "symptom"
+	if mode != "symptom" && mode != "trigger" {
+		mode = "use_case" // new default
 	}
 	domain := strings.TrimSpace(r.URL.Query().Get("domain"))
+	project := strings.TrimSpace(r.URL.Query().Get("project"))
 
 	pc := h.renderCtx(r)
 	pc.Title = "omoikane — lookup"
@@ -798,37 +908,44 @@ func (h *Handler) lookupPage(w http.ResponseWriter, r *http.Request) {
 	pc.LookupMode = mode
 	pc.LookupDomain = domain
 
-	if q != "" {
-		var (
-			hits []*store.LookupHit
-			err  error
-		)
-		if mode == "trigger" {
-			hits, err = h.Store.LookupByTrigger(r.Context(), q, domain, 25)
-		} else {
-			hits, err = h.Store.LookupBySymptom(r.Context(), q, 25)
-		}
-		if err != nil && !errors.Is(err, store.ErrInvalidInput) {
+	switch mode {
+	case "use_case":
+		const pageSize = 30
+		page := pageParam(r)
+		list, total, err := h.Store.ListUseCases(r.Context(), store.UseCaseFilter{
+			ProjectID: project, Domain: domain, Query: q,
+		}, pageSize, (page-1)*pageSize)
+		if err != nil {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-		for _, hit := range hits {
-			row := lookupRow{EntryID: hit.EntryID, Phrase: hit.Phrase, Source: hit.Source}
-			if e, e2 := h.Store.GetEntry(r.Context(), hit.EntryID); e2 == nil && e != nil {
-				row.Title = e.Title
-				row.Type = e.Type
+		pc.UseCaseList = list
+		pc.Pagination = buildPagination(r, total, page, pageSize)
+
+	case "symptom", "trigger":
+		// Legacy modes: phrase → entries.
+		if q != "" {
+			var (
+				hits []*store.LookupHit
+				err  error
+			)
+			if mode == "trigger" {
+				hits, err = h.Store.LookupByTrigger(r.Context(), q, domain, 25)
+			} else {
+				hits, err = h.Store.LookupBySymptom(r.Context(), q, 25)
 			}
-			pc.LookupRows = append(pc.LookupRows, row)
-		}
-	} else {
-		// No query → browse the indexed articles, most-recently-indexed first.
-		const pageSize = 30
-		page := pageParam(r)
-		list, total, lErr := h.Store.ListIndexedEntries(r.Context(),
-			r.URL.Query().Get("project"), pageSize, (page-1)*pageSize)
-		if lErr == nil {
-			pc.IndexedList = list
-			pc.Pagination = buildPagination(r, total, page, pageSize)
+			if err != nil && !errors.Is(err, store.ErrInvalidInput) {
+				http.Error(w, "internal error", http.StatusInternalServerError)
+				return
+			}
+			for _, hit := range hits {
+				row := lookupRow{EntryID: hit.EntryID, Phrase: hit.Phrase, Source: hit.Source}
+				if e, e2 := h.Store.GetEntry(r.Context(), hit.EntryID); e2 == nil && e != nil {
+					row.Title = e.Title
+					row.Type = e.Type
+				}
+				pc.LookupRows = append(pc.LookupRows, row)
+			}
 		}
 	}
 	h.render(w, "lookup", pc)
