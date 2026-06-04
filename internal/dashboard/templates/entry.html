@@ -122,5 +122,23 @@
   </tbody>
 </table>
 {{end}}
+
+{{if or .EntrySymptoms .EntryTriggers}}
+<h2>🔎 逆引き索引 <span class="muted" style="font-size:0.7em;font-weight:normal;">このエントリに繋がる症状 / トリガ(indexer 供給)</span></h2>
+{{if .EntrySymptoms}}
+<div class="field"><div class="label">症状 (symptoms)</div>
+  <div class="rev-chips">
+    {{range .EntrySymptoms}}<a class="rev-chip" href="/lookup?q={{urlq .}}&amp;mode=symptom{{if $.Token}}&amp;token={{urlq $.Token}}{{end}}">{{.}}</a>{{end}}
+  </div>
+</div>
+{{end}}
+{{if .EntryTriggers}}
+<div class="field"><div class="label">トリガ (triggers)</div>
+  <div class="rev-chips">
+    {{range .EntryTriggers}}<a class="rev-chip" href="/lookup?q={{urlq .Phrase}}&amp;mode=trigger{{if .Domain}}&amp;domain={{urlq .Domain}}{{end}}{{if $.Token}}&amp;token={{urlq $.Token}}{{end}}">{{.Phrase}}{{if .Domain}} <span class="rev-domain">{{.Domain}}</span>{{end}}</a>{{end}}
+  </div>
+</div>
+{{end}}
+{{end}}
 {{end}}{{/* close isJournal else */}}
 {{end}}

@@ -141,6 +141,12 @@ footer { padding: 1rem; text-align: center; color: var(--muted); font-size: 0.85
 .lookup-form select { padding: 0.45rem 0.5rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--fg); font: inherit; }
 .lookup-form button { padding: 0.45rem 1.1rem; border: 1px solid var(--accent); border-radius: 6px; background: var(--accent); color: var(--bg); font: inherit; cursor: pointer; }
 .lookup-form button:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
+
+/* Reverse-index chips on the entry page. */
+.rev-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.3rem; }
+.rev-chip { display: inline-block; padding: 0.2rem 0.6rem; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--accent); font-size: 0.85rem; text-decoration: none; }
+.rev-chip:hover { background: var(--hover); color: var(--accent-strong); border-color: var(--accent); }
+.rev-domain { color: var(--muted); font-size: 0.78em; }
 .pager-info { font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); }
 .empty { padding: 2rem; text-align: center; color: var(--muted); background: var(--surface);
          border: 1px dashed var(--border); border-radius: 6px; }

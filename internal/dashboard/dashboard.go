@@ -249,6 +249,10 @@ type pageCtx struct {
 	LookupDomain string
 	LookupRows   []lookupRow
 
+	// Entry page — this entry's reverse-lookup index (symptom/trigger → here)
+	EntrySymptoms []string
+	EntryTriggers []store.IndexedTrigger
+
 	// Phase 5 — chat
 	ChatThreads      []*store.ChatThread
 	ChatThread       *store.ChatThread
@@ -560,6 +564,13 @@ func (h *Handler) entry(w http.ResponseWriter, r *http.Request) {
 	}
 	if back, bErr := h.Store.ListRelationsTo(r.Context(), id); bErr == nil {
 		pc.Backlinks = back
+	}
+	// Reverse-lookup index for this entry (what symptoms/triggers reach it).
+	if syms, sErr := h.Store.EntrySymptoms(r.Context(), id); sErr == nil {
+		pc.EntrySymptoms = syms
+	}
+	if trigs, tErr := h.Store.EntryTriggers(r.Context(), id); tErr == nil {
+		pc.EntryTriggers = trigs
 	}
 	h.render(w, "entry", pc)
 }

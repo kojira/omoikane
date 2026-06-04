@@ -199,6 +199,45 @@ func (s *Store) ReplaceTriggers(ctx context.Context, entryID string, triggers []
 	return tx.Commit()
 }
 
+// EntrySymptoms returns the symptom phrases indexed for one entry — the
+// "this entry is reachable from these symptoms" view on the entry page.
+func (s *Store) EntrySymptoms(ctx context.Context, entryID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT phrase FROM symptoms_index WHERE entry_id = ? ORDER BY phrase`, entryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// EntryTriggers returns the (phrase, domain) triggers indexed for one entry.
+func (s *Store) EntryTriggers(ctx context.Context, entryID string) ([]IndexedTrigger, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT phrase, COALESCE(domain,'') FROM triggers_index WHERE entry_id = ? ORDER BY domain, phrase`, entryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []IndexedTrigger
+	for rows.Next() {
+		var t IndexedTrigger
+		if err := rows.Scan(&t.Phrase, &t.Domain); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
 // LookupByTrigger first consults trigger_rules (deterministic regex layer)
 // then falls back to the FTS index. Rule hits get a high synthetic score
 // so they sort first. The `domain` filter is applied to both layers.
