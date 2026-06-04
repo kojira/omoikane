@@ -40,23 +40,35 @@
     <div class="empty">該当なし。まだ index されていないエントリかもしれません(indexer が90分毎にカバレッジを広げています)。</div>
   {{end}}
 {{else}}
-  <h2>逆引き済みの記事 <span class="muted" style="font-size:0.7em;font-weight:normal;">最近 index された順</span></h2>
+  <h2>逆引き済みの記事 <span class="muted" style="font-size:0.7em;font-weight:normal;">最近 index された順 — 「どんな問題で引けるか」を主役に</span></h2>
   {{if .IndexedList}}
-  <table>
-    <thead><tr><th>ID</th><th>Type</th><th>Title</th><th>症状</th><th>トリガ</th><th>最終index</th></tr></thead>
-    <tbody>
-      {{range .IndexedList}}
-      <tr>
-        <td><span class="badge">{{.EntryID}}</span></td>
-        <td><span class="badge">{{.Type}}</span></td>
-        <td><a href="/entries/{{.EntryID}}{{if $.Token}}?token={{urlq $.Token}}{{end}}">{{.Title}}</a></td>
-        <td class="muted">{{.Symptoms}}</td>
-        <td class="muted">{{.Triggers}}</td>
-        <td class="muted">{{.LastIndexed}}</td>
-      </tr>
+  <ul class="rev-list">
+    {{range .IndexedList}}
+    <li class="rev-row">
+      <div class="rev-row-head">
+        <span class="badge">{{.ProjectID}}</span>
+        <span class="badge">{{.Type}}</span>
+        <a class="rev-title" href="/entries/{{.EntryID}}{{if $.Token}}?token={{urlq $.Token}}{{end}}">{{.Title}}</a>
+        <span class="rev-id muted">{{.EntryID}}</span>
+      </div>
+      {{if .SampleSymptoms}}
+      <div class="rev-chips rev-chips-sym">
+        <span class="rev-tag">🩹 症状</span>
+        {{range .SampleSymptoms}}<a class="rev-chip" href="/lookup?q={{.}}&amp;mode=symptom{{if $.Token}}&amp;token={{$.Token}}{{end}}">{{.}}</a>{{end}}
+        {{if gt .Symptoms (len .SampleSymptoms)}}<span class="rev-more muted">+{{minus .Symptoms (len .SampleSymptoms)}}</span>{{end}}
+      </div>
       {{end}}
-    </tbody>
-  </table>
+      {{if .SampleTriggers}}
+      <div class="rev-chips rev-chips-trg">
+        <span class="rev-tag">🎯 トリガ</span>
+        {{range .SampleTriggers}}<a class="rev-chip" href="/lookup?q={{.Phrase}}&amp;mode=trigger{{if .Domain}}&amp;domain={{.Domain}}{{end}}{{if $.Token}}&amp;token={{$.Token}}{{end}}">{{.Phrase}}{{if .Domain}} <span class="rev-domain">{{.Domain}}</span>{{end}}</a>{{end}}
+        {{if gt .Triggers (len .SampleTriggers)}}<span class="rev-more muted">+{{minus .Triggers (len .SampleTriggers)}}</span>{{end}}
+      </div>
+      {{end}}
+      <div class="rev-meta muted">最終 index: {{.LastIndexed}}</div>
+    </li>
+    {{end}}
+  </ul>
   {{template "pager" .Pagination}}
   {{else}}
   <div class="empty">まだ逆引き index されたエントリがありません(indexer が90分毎に増やします)。上の検索ボックスで症状/トリガを直接引くこともできます。</div>

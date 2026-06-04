@@ -56,6 +56,7 @@ func newFromFS(s *store.Store, open bool, fsys fs.FS) (*Handler, error) {
 	funcs := template.FuncMap{
 		"trunc":       trunc,
 		"urlq":        url.QueryEscape,
+		"minus":       func(a, b int) int { return a - b },
 		"deref":       deref,
 		"wikiLinks":   wikiLinks,
 		"chatContent": chatContent,

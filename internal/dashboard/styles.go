@@ -147,6 +147,19 @@ footer { padding: 1rem; text-align: center; color: var(--muted); font-size: 0.85
 .rev-chip { display: inline-block; padding: 0.2rem 0.6rem; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--accent); font-size: 0.85rem; text-decoration: none; }
 .rev-chip:hover { background: var(--hover); color: var(--accent-strong); border-color: var(--accent); }
 .rev-domain { color: var(--muted); font-size: 0.78em; }
+
+/* Reverse-index browse list (/lookup query-empty state) — card-style rows */
+.rev-list { list-style: none; padding: 0; margin: 1rem 0 1.5rem; }
+.rev-row { padding: 0.95rem 0.2rem; border-bottom: 1px solid var(--hairline); }
+.rev-row:last-child { border-bottom: none; }
+.rev-row-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.45rem; }
+.rev-title { font-family: var(--font-serif); font-size: 1.02rem; text-decoration: none; color: var(--fg); margin-left: 0.2rem; }
+.rev-title:hover { text-decoration: underline; color: var(--accent-strong); }
+.rev-id { font-family: var(--font-mono); font-size: 0.78rem; margin-left: auto; }
+.rev-chips-sym, .rev-chips-trg { margin-top: 0.4rem; align-items: baseline; }
+.rev-tag { font-size: 0.78rem; color: var(--muted); margin-right: 0.3rem; min-width: 4.2rem; display: inline-block; }
+.rev-more { font-size: 0.78rem; align-self: center; padding: 0.2rem 0.4rem; }
+.rev-meta { font-family: var(--font-mono); font-size: 0.75rem; margin-top: 0.45rem; }
 .pager-info { font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); }
 .empty { padding: 2rem; text-align: center; color: var(--muted); background: var(--surface);
          border: 1px dashed var(--border); border-radius: 6px; }

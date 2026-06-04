@@ -238,17 +238,20 @@ func (s *Store) EntryTriggers(ctx context.Context, entryID string) ([]IndexedTri
 	return out, rows.Err()
 }
 
-// IndexedEntrySummary is one entry that has reverse-index coverage, with its
-// symptom/trigger counts and when it was last indexed — for the /lookup browse
-// list of indexed articles.
+// IndexedEntrySummary is one entry that has reverse-index coverage. It carries
+// totals plus a small sample of the actual symptom / trigger phrases so the
+// /lookup browse list is scannable in human terms (the phrases ARE the human
+// language; counts and titles alone aren't).
 type IndexedEntrySummary struct {
-	EntryID     string
-	Title       string
-	Type        string
-	ProjectID   string
-	Symptoms    int
-	Triggers    int
-	LastIndexed string // max(created_at) across symptoms+triggers
+	EntryID         string
+	Title           string
+	Type            string
+	ProjectID       string
+	Symptoms        int
+	Triggers        int
+	LastIndexed     string             // max(created_at) across symptoms+triggers
+	SampleSymptoms  []string           // up to 3 most-recent symptom phrases
+	SampleTriggers  []IndexedTrigger   // up to 2 most-recent triggers (with domain)
 }
 
 // ListIndexedEntries lists entries that have at least one symptom or trigger
@@ -302,7 +305,39 @@ func (s *Store) ListIndexedEntries(ctx context.Context, project string, limit, o
 		}
 		out = append(out, &r)
 	}
-	return out, total, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	// Enrich each row with a few sample phrases. The 30-row page makes 60 small
+	// indexed queries — cheap, and far simpler than aggregate-with-LIMIT SQL.
+	for _, r := range out {
+		sRows, sErr := s.db.QueryContext(ctx,
+			`SELECT phrase FROM symptoms_index WHERE entry_id = ?
+			 ORDER BY created_at DESC, id DESC LIMIT 3`, r.EntryID)
+		if sErr == nil {
+			for sRows.Next() {
+				var p string
+				if sRows.Scan(&p) == nil {
+					r.SampleSymptoms = append(r.SampleSymptoms, p)
+				}
+			}
+			sRows.Close()
+		}
+		tRows, tErr := s.db.QueryContext(ctx,
+			`SELECT phrase, COALESCE(domain,'') FROM triggers_index WHERE entry_id = ?
+			 ORDER BY created_at DESC, id DESC LIMIT 2`, r.EntryID)
+		if tErr == nil {
+			for tRows.Next() {
+				var t IndexedTrigger
+				if tRows.Scan(&t.Phrase, &t.Domain) == nil {
+					r.SampleTriggers = append(r.SampleTriggers, t)
+				}
+			}
+			tRows.Close()
+		}
+	}
+	return out, total, nil
 }
 
 // LookupByTrigger first consults trigger_rules (deterministic regex layer)
