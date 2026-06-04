@@ -109,6 +109,7 @@ func (h *Handler) Mount(r chi.Router) {
 			r.With(auth.RequireScope("write")).Post("/entries", h.createEntry)
 			r.With(auth.RequireScope("write")).Patch("/entries/{id}", h.updateEntry)
 			r.With(auth.RequireScope("write")).Delete("/entries/{id}", h.deleteEntry)
+			r.With(auth.RequireScope("write")).Post("/entries/{id}/index", h.putEntryIndex)
 
 			r.With(auth.RequireScope("read")).Post("/search", h.search)
 

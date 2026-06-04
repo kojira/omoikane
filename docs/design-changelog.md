@@ -51,6 +51,29 @@
 
 ---
 
+## v0.15(2026-06-04)
+
+### 背景
+
+蓄積が進み逆引きインデックスを作れる量になったが、調べると **逆引きサブシステムが死蔵**していた。器(`symptoms_index`/`triggers_index`、`/v1/lookup/by-symptom|trigger`、`/v1/index`)は Phase 2 で実装済みだが、populate は **enrich 時の副作用のみ**。omoikane は LLM 無しの dumb infra なので enrich が症状/トリガを出さず、本番 lookup は常に 0 件だった。
+
+### 変更点
+
+- **サーバ**: `POST /v1/entries/{id}/index`(write scope)を新設。body `{symptoms[], triggers[{phrase,domain}], source}` → `ReplaceSymptoms`/`ReplaceTriggers`。dimension ごと冪等 REPLACE、存在しない entry は 404、空は 400。e2e テストで「書き込み→lookup がヒット」を実証(`index_write_test.go`)。
+- **新司書 Indexer(9 役割目)**: 蓄積エントリを読み、症状/トリガ句を抽出して上記 API で構造化 index に供給。`/v1/lookup`(エージェント)と `/v1/index`(人間)の両方を生き返らせる。design.md §23.2 ロスター更新 + §23.15.3 を新設。
+
+### 設計判断の根拠
+
+- **1 つの index を 2 つの読み手で共有**(並行成果物を作らない=シンプル/長期保守性)。
+- **Phase 5 直接書きの 2 例目**: 逆引き index は派生メタデータで再生成可能・本文不変。summarizer の日次ジャーナル(ACTIVE)と同じく sanctioned な直接書きとし、DRAFT 提案を介さない。`source` で監査。
+- **Cataloger との境界**: Cataloger=要約/提案(retrieval 句は本文)、Indexer=その句を構造化 index 行に落とす橋渡し。書き込み先が重ならない。
+
+### 影響範囲
+
+既存 lookup の挙動は不変(空だったものが埋まる)。サーバに 1 エンドポイント追加のみ。Indexer 投入後、本番 lookup がヒットを返すようになる。
+
+---
+
 ## v0.14(2026-06-04)
 
 ### 背景
