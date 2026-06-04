@@ -87,6 +87,10 @@ For each target entry, a single `POST /v1/entries/{id}/index` with:
   concepts, user-facing wording. Domain groups them (e.g. `audio`,
   `training`, `auth`, `deployment`). Both languages here too.
 
+**Phrases are *queries*, not sentences from the entry. Aim for 3–8
+words, HARD LIMIT 50 characters per phrase.** Bad: a sentence lifted
+from the body. Good: "口の開きが弱い" / "weak open-mouth articulation".
+
 The phrases must be **grounded in the entry's real content** — read
 the body and its `When to retrieve` section (if the cataloger wrote
 one) and extract; do not pad with generic terms.

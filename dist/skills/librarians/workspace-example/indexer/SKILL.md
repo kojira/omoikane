@@ -47,10 +47,13 @@ Read the full body (and the cataloger summary's `When to retrieve` if
 one exists). Produce phrases **grounded in the entry's real content**:
 
 - **symptoms** (3–8): how a person in trouble would describe the
-  problem this entry covers.
+  problem this entry covers, in their own words.
 - **triggers** (`{phrase, domain}`): the query intents that should land
   here, grouped by domain (`audio`, `training`, `auth`, …).
 
+**Phrases are *queries*, not sentences from the entry. Aim for 3–8
+words, HARD LIMIT 50 characters per phrase.** Bad: a sentence lifted
+from the body. Good: "口の開きが弱い" / "weak open-mouth articulation".
 Write each in **BOTH Japanese and English** so cross-language lookup
 reaches the entry. Do NOT invent phrases the entry doesn't support; do
 NOT pad with generic words ("error", "issue").

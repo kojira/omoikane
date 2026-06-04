@@ -54,14 +54,14 @@
       {{if .SampleSymptoms}}
       <div class="rev-chips rev-chips-sym">
         <span class="rev-tag">🩹 症状</span>
-        {{range .SampleSymptoms}}<a class="rev-chip" href="/lookup?q={{.}}&amp;mode=symptom{{if $.Token}}&amp;token={{$.Token}}{{end}}">{{.}}</a>{{end}}
+        {{range .SampleSymptoms}}<a class="rev-chip" href="/lookup?q={{.}}&amp;mode=symptom{{if $.Token}}&amp;token={{$.Token}}{{end}}" title="{{.}}">{{trunc . 50}}</a>{{end}}
         {{if gt .Symptoms (len .SampleSymptoms)}}<span class="rev-more muted">+{{minus .Symptoms (len .SampleSymptoms)}}</span>{{end}}
       </div>
       {{end}}
       {{if .SampleTriggers}}
       <div class="rev-chips rev-chips-trg">
         <span class="rev-tag">🎯 トリガ</span>
-        {{range .SampleTriggers}}<a class="rev-chip" href="/lookup?q={{.Phrase}}&amp;mode=trigger{{if .Domain}}&amp;domain={{.Domain}}{{end}}{{if $.Token}}&amp;token={{$.Token}}{{end}}">{{.Phrase}}{{if .Domain}} <span class="rev-domain">{{.Domain}}</span>{{end}}</a>{{end}}
+        {{range .SampleTriggers}}<a class="rev-chip" href="/lookup?q={{.Phrase}}&amp;mode=trigger{{if .Domain}}&amp;domain={{.Domain}}{{end}}{{if $.Token}}&amp;token={{$.Token}}{{end}}" title="{{.Phrase}}">{{trunc .Phrase 50}}{{if .Domain}} <span class="rev-domain">{{.Domain}}</span>{{end}}</a>{{end}}
         {{if gt .Triggers (len .SampleTriggers)}}<span class="rev-more muted">+{{minus .Triggers (len .SampleTriggers)}}</span>{{end}}
       </div>
       {{end}}
