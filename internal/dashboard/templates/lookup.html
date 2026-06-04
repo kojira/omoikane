@@ -35,13 +35,6 @@
       </div>
       {{$desc := .DescriptionJA}}{{if eq $.Lang "en"}}{{$desc = .DescriptionEN}}{{end}}
       {{if $desc}}<div class="uc-desc">{{$desc}}</div>{{end}}
-      {{if .SampleEntries}}
-      <ul class="uc-samples">
-        {{range .SampleEntries}}
-        <li><a href="/entries/{{.EntryID}}{{if $.Token}}?token={{urlq $.Token}}{{end}}"><span class="badge">{{.Type}}</span> {{.Title}}</a> <span class="muted">— {{.ProjectID}}</span></li>
-        {{end}}
-      </ul>
-      {{end}}
     </li>
     {{end}}
   </ul>
