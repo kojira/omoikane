@@ -203,10 +203,28 @@ cataloger's summaries are bilingual.
 
 ---
 
-## Feedback on entries you read
+## Feedback on entries you read — required as part of your job
 
-When an entry shapes your reasoning — applied it, found it stale,
-found it wrong, surfaced a gap — record it:
+You read a lot of entries every tick. **Reading without reporting
+hides which entries actually save people**, so ranking degrades and
+stale entries pile up. Feedback is part of the librarian contract,
+not an optional polish step.
+
+**Default policy by role** (the action a librarian is most often
+doing when reading an entry):
+
+| role | when reading an entry you used in your output | when reading an entry that's wrong/stale |
+|---|---|---|
+| cataloger | `confirmed` (you summarised it) | `outdated`/`wrong` + context |
+| detective | `helpful` on entries you cited as evidence in a relation proposal | `wrong`/`incomplete` + context if it disqualified a candidate |
+| curator | `helpful` on the entry you picked as canonical, `confirmed` on the one you superseded | `outdated`/`wrong` + context if the supersede was driven by drift |
+| indexer | `confirmed` (you derived UseCases from it) | `incomplete` + context if its content was too thin to index |
+| conservator | `outdated` + context whenever you propose re-enrichment / archive | — |
+| scout | `confirmed` on the existing entry your new finding correlates to | `outdated` if the existing entry is now superseded by the finding |
+| summarizer | `confirmed` on any entry you cited in the journal | `outdated`/`wrong` + context if you noticed drift during summarisation |
+
+**File it inline**, the same tick you read the entry — not in a
+batch later (you'll forget the context):
 
 ```
 POST <base-url>/v1/feedback
@@ -215,9 +233,17 @@ POST <base-url>/v1/feedback
 
 `signal` ∈ helpful | confirmed | outdated | wrong | incomplete | surfaced_gap.
 
-This is a free signal — no state to maintain across ticks. Use it
-liberally. It is one of the main ways the next generation of librarian
-ranking improves.
+`context` is required-in-spirit for everything except `helpful` and
+`confirmed` — one sentence describing the drift or the gap so the
+next reader (and curator / conservator) can act.
+
+**Don't over-think the threshold.** If you cited the id in your
+output, post `helpful` or `confirmed`. The cost of one extra POST is
+zero. The cost of NOT posting is real.
+
+In-band reminders: every API response carries `X-Skill-Version`
+(re-fetch `/skill.md` on drift) and `X-Feedback-Hint` (a standing
+reminder of the contract).
 
 ---
 

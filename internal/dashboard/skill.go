@@ -4,12 +4,15 @@ import (
 	"net/http"
 	"strings"
 	"text/template"
+
+	"github.com/kojira/omoikane/internal/api"
 )
 
-// skillVersion is bumped manually when the skill contract changes
-// meaningfully (new required tools, new register flow, etc.). Minor
-// prose edits don't bump it.
-const skillVersion = "0.2.0"
+// skillVersion mirrors api.SkillVersion — kept here so the existing
+// template fill and tests stay simple. The canonical value lives in
+// internal/api/skill_version.go because that package also owns the
+// middleware that stamps the header on every API response.
+const skillVersion = api.SkillVersion
 
 // agentSkillTmpl is the single, canonical SKILL.md template,
 // served at /skill.md. Earlier the codebase had a separate "human

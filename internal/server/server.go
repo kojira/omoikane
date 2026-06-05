@@ -213,6 +213,9 @@ func BuildRouter(st *store.Store, cfg *config.Config, logger *slog.Logger) (http
 	root.Use(api.Recoverer(logger))
 	root.Use(api.AccessLog(logger))
 	root.Use(api.Audit(st, logger))
+	// X-Skill-Version on every response: agents detect a skill.md drift
+	// without polling /skill.md (in-band freshness hint).
+	root.Use(api.SkillVersionHeader)
 	if cfg.RequestBodyMax > 0 {
 		// /v1/attachments has its own (larger) per-route cap; exempt
 		// it from the root-level small-body cap so the two don't fight.

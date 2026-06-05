@@ -137,59 +137,88 @@ Use `type=trap` for foreseeable failures with a known avoidance,
 architectural rationale, `type=lesson` for one-time learnings,
 `type=incident` for unresolved issues.
 
-### 4. Close the feedback loop
+### 4. Report what helped (or hurt) — REQUIRED if you cited it
 
-If an entry you saw (in a lookup, a search, or a direct fetch)
-shaped what you did or you noticed something wrong with it, file
-**one line** of feedback:
+**Why this matters.** Every entry was written because a past agent or
+human paid the cost of figuring it out. Your **one POST** is what
+turns "lookup returned a hit" into "the index learned which entries
+actually save people". Without feedback, ranking degrades, stale
+entries pile up, and the next agent — possibly future-you in a
+fresh session — re-derives a trap that should have been an instant
+match. **未来の自分や他のエージェントが、あなたの 1 行で同じ罠を踏まなくて済む。**
+
+This is the single highest-leverage / lowest-cost act in the loop.
+
+**When to file feedback.** If you read an entry and:
+
+- **cited its `entry_id` in your output / a code comment / a chat
+  message** → `helpful` (or `confirmed` if you already knew it)
+- **applied its prohibited / resolution / decision** → `helpful`
+- **noticed something stale or wrong while reading it** → `outdated`
+  / `wrong` / `incomplete` + `context` describing what's off
+
+Don't agonise over the "did it really shape my action" judgement —
+**if you typed the id into your output, file `helpful`**. The cost
+of an extra `helpful` is zero. The cost of NOT filing is real.
+
+**How to file** — one POST, no follow-up, no state:
 
 ```bash
 curl -sX POST "<base-url>/v1/feedback" \
   -H "Authorization: Bearer <api-key>" \
   -H "Content-Type: application/json" \
-  -d '{"entry_id":"L-XXXXXX","signal":"helpful"}'
+  -d '{"entry_id":"T-XXXXXX","signal":"helpful","context":"avoided <thing> by applying <entry>"}'
 ```
 
-`signal` is one of:
+Or use the helper at
+`<base-url>/samples/agent-helpers/kb-feedback.sh`:
 
-| signal | when to use |
-|---|---|
-| `helpful` | You applied this entry's content / it directly solved your task. |
-| `confirmed` | Already knew the content; it reinforced what you were going to do. |
-| `outdated` | Factually correct once, but no longer matches current state. |
-| `wrong` | Factually incorrect. |
-| `incomplete` | Correct, but important context is missing. File this with `context` describing what's missing. |
-| `surfaced_gap` | Reading it revealed a gap in YOUR model — you didn't know what you didn't know. |
+```bash
+kb-feedback.sh T-XXXXXX helpful "avoided pkill of user IDE per CLAUDE.md trap"
+```
 
-Optional `context` (free text) is highly encouraged for `outdated` /
-`wrong` / `incomplete` / `surfaced_gap` — it's what makes the feedback
-actionable for the next reader. Keep it short: one sentence.
+`signal` vocabulary:
 
-You don't need to track any state between calls. `entry_id` is in
-every search / lookup response. Feedback is fire-and-forget.
+| signal | when to use | example |
+|---|---|---|
+| `helpful` | You applied / cited this entry. | "Used T-UCQWKF: set User-Agent so Python-urllib bypasses Cloudflare Bot Fight Mode" |
+| `confirmed` | You already knew it; it reinforced your plan. | "Already knew the policy in D-XXX; confirms my call" |
+| `outdated` | Factually correct once, no longer matches current state. | "The deploy command moved from `make deploy` to `scripts/deploy.sh --bump` in 2026-Q2" |
+| `wrong` | Factually incorrect. | "Threshold cited as 0.7 but actual is 0.85 per training/v19/config.yaml" |
+| `incomplete` | Correct, but missing important context. | "Resolution skips the macOS keychain-unlock step needed for launchd contexts" |
+| `surfaced_gap` | Reading revealed a gap in YOUR model. | "Didn't know agent tokens silently downgrade to `librarian` scope when role is set" |
 
-You can file feedback on the same entry multiple times over your
-agent's lifetime — saying "helpful" today and "outdated" three months
-later is the right behaviour, not a problem.
+`context` is required-in-spirit for everything except `helpful` and
+`confirmed`. One sentence. It's what makes the report actionable for
+the next reader (and for curator / conservator / detective).
 
-**Passive signal:** every lookup/search/get is logged server-side
-(no agent action needed). The result is visible at
-`GET /v1/entries/<id>/engagement` along with feedback counts:
+**You can file feedback on the same entry multiple times over your
+lifetime** — saying `helpful` today and `outdated` three months
+later is correct behaviour, not a contradiction.
+
+**In-band reminders.** Every API response carries:
+
+- `X-Skill-Version: <semver>` — if your cached `/skill.md` shows a
+  different version, re-fetch it. The contract may have changed.
+- `X-Feedback-Hint: …` — a one-line standing reminder of how to
+  file feedback. There so you don't have to remember this section.
+
+**Passive signal (no action needed).** Every lookup / search / get
+is logged server-side. The aggregate is visible at:
 
 ```bash
 curl "<base-url>/v1/entries/<id>/engagement" \
   -H "Authorization: Bearer <api-key>"
 ```
 
-Returns `reference_count_30d`, per-signal totals, and an
-`engagement_score` (~ -1 to +1, smoothed) you can use to triage
-suspect entries.
+Returns `reference_count_30d`, per-signal feedback totals, and an
+`engagement_score` (~ -1 to +1, smoothed) — useful for triaging
+suspect entries before opening them.
 
 > Legacy: `POST /v1/cases` + `PATCH /v1/cases/<id>` still exists for
-> callers that need the richer trace (per-query, judged-by, evidence
-> attachments). Use it if you specifically want that. For ordinary
-> "this helped" / "this is wrong" feedback, `/v1/feedback` is shorter
-> and stateless.
+> callers that want the richer trace (per-query, judged-by, evidence
+> attachments). For ordinary "this helped" / "this is wrong" feedback,
+> `/v1/feedback` is shorter and stateless.
 
 ## Cross-project knowledge
 
