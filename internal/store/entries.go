@@ -895,6 +895,10 @@ func decodeTagsSnapshot(s string) []string {
 // exists. A summary is a librarian_meta entry with metadata.kind=cataloger_summary
 // and metadata.source_entry_id matching the target.
 //
+// Phase 5 librarians write summaries as DRAFT (proposals), so we accept
+// DRAFT / ACTIVE / INVESTIGATING — everything except SUPERSEDED / ARCHIVED /
+// DUPLICATE. Otherwise no live summaries would ever be visible.
+//
 // Returns ErrNotFound when no cataloger summary has been written for this
 // entry yet (the indexer / dashboard then falls back to the entry itself).
 func (s *Store) EntrySummary(ctx context.Context, entryID string) (*Entry, error) {
@@ -902,7 +906,7 @@ func (s *Store) EntrySummary(ctx context.Context, entryID string) (*Entry, error
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id FROM entries
 		 WHERE type = 'librarian_meta'
-		   AND status = 'ACTIVE'
+		   AND status NOT IN ('SUPERSEDED','ARCHIVED','DUPLICATE')
 		   AND json_extract(metadata, '$.kind') = 'cataloger_summary'
 		   AND json_extract(metadata, '$.source_entry_id') = ?
 		 ORDER BY created_at DESC
