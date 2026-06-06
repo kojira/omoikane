@@ -407,10 +407,17 @@ func (h *Handler) home(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	// Top-level categories (UseCase tree roots) for the home overview.
+	// One row per META + standalone leaf. Drill into /use_cases/{slug}.
+	// Errors are non-fatal — home shouldn't 500 because UseCases failed.
+	cats, _, cErr := h.Store.ListUseCases(ctx, store.UseCaseFilter{Level: "top"}, 50, 0)
 	pc := h.renderCtx(r)
 	pc.Title = "omoikane — home"
 	pc.Projects = ps
 	pc.Entries = entries
+	if cErr == nil {
+		pc.UseCaseList = cats
+	}
 	pc.Pagination = buildPagination(r, total, page, pageSize)
 	h.render(w, "home", pc)
 }
