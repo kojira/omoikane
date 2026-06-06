@@ -118,6 +118,23 @@ wrote each row for audit.
 
 ## Session protocol (DO EXACTLY THIS)
 
+### 0. Check whether the top level needs tidying — BEFORE step 1
+
+This must run first, every session. It's cheap (one HTTP call) and it
+prevents the normal "no new entries → exit 0" path from skipping the
+periodic re-balance:
+
+```bash
+TOP_COUNT=$(curl -fsS -H "Authorization: Bearer $KB_TOKEN" \
+  "$KB_URL/v1/use_cases?level=top&limit=1" | jq .total)
+echo "top-level count: $TOP_COUNT"
+```
+
+- If `TOP_COUNT > 20`: **switch to Tidy mode** (see section below). Do
+  that work INSTEAD of steps 1–3 this session. The new-entry backlog
+  can wait one tick; an overgrown top level is the bigger UX hit.
+- Otherwise: proceed to step 1.
+
 ### 1. Pick targets (signal-driven)
 
 Choose entries whose UseCase membership is **missing**:
