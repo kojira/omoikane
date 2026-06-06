@@ -1,6 +1,12 @@
 {{define "content"}}
 <nav class="subnav">
   <a href="{{navURL "/lookup" .Token .Lang}}">← Lookup</a>
+  {{with .UseCaseParent}}
+    <span class="muted">/</span>
+    <a href="{{navURL (print "/use_cases/" .Slug) $.Token $.Lang}}">
+      {{if eq $.Lang "en"}}{{.NameEN}}{{else}}{{.NameJA}}{{end}}
+    </a>
+  {{end}}
 </nav>
 
 {{with .UseCase}}
@@ -16,23 +22,55 @@
 {{if $desc}}<p class="uc-detail-desc reading">{{$desc}}</p>{{end}}
 {{end}}
 
-<h2>関連エントリ</h2>
+{{if .UseCaseChildren}}
+<h2>サブカテゴリ</h2>
+<ul class="uc-list">
+  {{range .UseCaseChildren}}
+  <li class="uc-row">
+    <div class="uc-row-head">
+      {{if .Domain}}<span class="badge">{{.Domain}}</span>{{end}}
+      <a class="uc-name" href="{{navURL (print "/use_cases/" .Slug) $.Token $.Lang}}">
+        {{if eq $.Lang "en"}}{{.NameEN}}{{else}}{{.NameJA}}{{end}}
+      </a>
+      <span class="uc-altname muted">
+        {{if eq $.Lang "en"}}{{.NameJA}}{{else}}{{.NameEN}}{{end}}
+      </span>
+      {{if gt .ChildCount 0}}<span class="uc-count muted">📁 {{.ChildCount}} children</span>{{end}}
+      <span class="uc-count muted">📄 {{.EntryCount}} entries</span>
+    </div>
+    {{$desc := .DescriptionJA}}{{if eq $.Lang "en"}}{{$desc = .DescriptionEN}}{{end}}
+    {{if $desc}}<div class="uc-desc">{{$desc}}</div>{{end}}
+  </li>
+  {{end}}
+</ul>
+{{end}}
+
+<h2>関連エントリ{{if .UseCaseChildren}} (直接リンクのみ){{end}}</h2>
 {{if .Entries}}
-<table>
-  <thead><tr><th>ID</th><th>Type</th><th>Status</th><th>Title</th><th>Project</th></tr></thead>
-  <tbody>
-    {{range .Entries}}
-    <tr>
-      <td><span class="badge">{{.ID}}</span></td>
-      <td><span class="badge">{{.Type}}</span></td>
-      <td><span class="badge badge-status-{{.Status}}">{{.Status}}</span></td>
-      <td><a href="/entries/{{.ID}}{{if $.Token}}?token={{urlq $.Token}}{{end}}">{{.Title}}</a></td>
-      <td class="muted">{{.ProjectID}}</td>
-    </tr>
+<ul class="uc-entry-list">
+  {{range .Entries}}
+  <li class="uc-entry-row">
+    <div class="uc-entry-head">
+      <span class="badge">{{.Type}}</span>
+      <span class="badge badge-status-{{.Status}}">{{.Status}}</span>
+      <a class="uc-entry-title" href="/entries/{{.ID}}{{if $.Token}}?token={{urlq $.Token}}{{end}}">
+        {{.Title}}
+      </a>
+      <span class="muted uc-entry-meta">{{.ProjectID}} · {{.ID}}</span>
+    </div>
+    {{with index $.EntrySummaries .ID}}
+      {{/* Cataloger summary preview — middle layer between leaf UseCase and raw body */}}
+      <div class="uc-entry-summary reading">
+        {{if .Title}}<div class="uc-entry-summary-title">{{.Title}}</div>{{end}}
+        <div class="uc-entry-summary-body">{{trunc .Body 320}}</div>
+      </div>
     {{end}}
-  </tbody>
-</table>
+  </li>
+  {{end}}
+</ul>
 {{template "pager" .Pagination}}
+{{else if .UseCaseChildren}}
+<div class="empty">このメタカテゴリには直接リンクされたエントリはありません(サブカテゴリ経由でたどってください)。</div>
 {{else}}
 <div class="empty">関連エントリがまだありません。</div>
 {{end}}

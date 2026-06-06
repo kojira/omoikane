@@ -42,7 +42,18 @@ curl -fsS -H "Authorization: Bearer $KB_TOKEN" \
 
 ### 2. For each entry, decide UseCase membership
 
-Read the body, then pick **1–3 UseCases** the entry belongs to.
+**Prefer the cataloger summary over the raw body** — summaries are denser
+and derived categories are more stable. Fall back to the body when no
+summary exists yet:
+
+```bash
+SUMMARY=$(curl -fsS -H "Authorization: Bearer $KB_TOKEN" \
+  "$KB_URL/v1/entries/<id>/summary" 2>/dev/null) \
+  || SUMMARY=$(curl -fsS -H "Authorization: Bearer $KB_TOKEN" \
+                 "$KB_URL/v1/entries/<id>")
+```
+
+Then pick **1–3 UseCases** the entry belongs to.
 
 **Search BEFORE you create** — UseCases are shared resources:
 
@@ -96,3 +107,77 @@ Print: `session done — covered N entries across M use_cases (created: c, linke
   still exists for API back-compat but you do NOT write to it.
 - Link only entry ids you actually read this session (the API 404s on
   unknown ids).
+
+## Tidy mode — stack META categories above leaves (BOTTOM-UP growth)
+
+UseCases are a tree (`parent_id`). As the corpus grows, the **top-level
+list** (`?level=top`) gets too long to browse. Periodically you should
+**stack META categories ABOVE the existing leaves** to compress the top
+level back to ~7–12 rows.
+
+**This is bottom-up growth.** Leaves never change. Their slugs are stable.
+Their links to entries stay intact. You only add new META rows and
+rewrite `parent_id` on the existing rows to point at them.
+
+The same rule runs recursively at any level. If META rows themselves
+exceed the threshold one day, you stack META-of-META above them. There
+is no fixed "large / medium / small" — there's just whatever level is
+currently at the top, and the same rule that compresses it.
+
+### When to enter tidy mode
+
+```bash
+# Check current top-level count.
+COUNT=$(curl -fsS -H "Authorization: Bearer $KB_TOKEN" \
+  "$KB_URL/v1/use_cases?level=top&limit=1" | jq .total)
+echo "top-level count: $COUNT"
+```
+
+If `COUNT > 20`, switch to tidy mode. (Otherwise skip — keep doing leaf
+extraction in normal mode.)
+
+### What to do in tidy mode
+
+1. **Read all current top-level UseCases** with their names + descriptions:
+   ```bash
+   curl -fsS -H "Authorization: Bearer $KB_TOKEN" \
+     "$KB_URL/v1/use_cases?level=top&limit=200" \
+     | jq '.use_cases[] | {id, slug, name_ja, name_en, description_ja, description_en, domain, entry_count, child_count}'
+   ```
+
+2. **Cluster them into 5–10 META groups** by semantic theme. Read the
+   names and descriptions; group ones that share a domain / problem
+   space / lifecycle stage.
+
+3. **Create each META as a new UseCase with parent_id=null**:
+   ```bash
+   bash .agents/skills/omoikane-indexer/scripts/post_use_case.sh '{
+     "name_ja": "音声・対話基盤",
+     "name_en": "Voice and dialogue foundation",
+     "description_ja": "音声合成・認識・対話制御を含む音声対話の基盤領域",
+     "description_en": "Speech synthesis, recognition, and dialogue control"
+   }'
+   # → returns {"id":"U-XXXXXX",...}
+   ```
+
+4. **Repoint each grouped leaf to its new parent** with the helper script:
+   ```bash
+   bash .agents/skills/omoikane-indexer/scripts/set_parent.sh \
+     "<leaf_id>" "<meta_id>"
+   ```
+
+5. **Verify**: after tidy, `?level=top` should now return ~7–12 META
+   rows. Each META's `child_count` should match the number of leaves
+   you stacked under it.
+
+### Granularity for META names
+
+Same rules as leaves (3–8 words, ≤ 50 chars per side, bilingual). But
+**broader**:
+- A META should plausibly hold 3+ leaves.
+- It names a domain / theme — "Voice and dialogue foundation",
+  "Training and CI", "Web frontend & UX", "Cloud & infrastructure",
+  "Agent runtime / harness".
+- Avoid catch-all names like "Misc" or "General" — better to leave a
+  leaf at the top level than to dump it under a fake parent.
+

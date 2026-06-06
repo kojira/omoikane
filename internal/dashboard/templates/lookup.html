@@ -2,7 +2,8 @@
 <h1>🔎 Lookup</h1>
 <p class="muted reading">
   ユースケース起点で omoikane の知識を辿る — 問題類型(UseCase)を主役に並べ、
-  各 UseCase に関連エントリがぶら下がります。
+  各 UseCase に関連エントリがぶら下がります。トップにはメタカテゴリ(子を持つもの)と
+  独立したリーフカテゴリが並び、クリックで一段下にドリルダウンします。
 </p>
 
 <form method="get" action="/lookup" class="lookup-form">
@@ -31,7 +32,8 @@
         <span class="uc-altname muted">
           {{if eq $.Lang "en"}}{{.NameJA}}{{else}}{{.NameEN}}{{end}}
         </span>
-        <span class="uc-count muted">{{.EntryCount}} entries</span>
+        {{if gt .ChildCount 0}}<span class="uc-count muted">📁 {{.ChildCount}} children</span>{{end}}
+        <span class="uc-count muted">📄 {{.EntryCount}} entries</span>
       </div>
       {{$desc := .DescriptionJA}}{{if eq $.Lang "en"}}{{$desc = .DescriptionEN}}{{end}}
       {{if $desc}}<div class="uc-desc">{{$desc}}</div>{{end}}

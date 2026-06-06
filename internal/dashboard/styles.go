@@ -188,6 +188,20 @@ footer { padding: 1rem; text-align: center; color: var(--muted); font-size: 0.85
 .uc-detail-altname { font-size: 0.9rem; margin-top: 0; }
 .uc-detail-desc { max-width: 70ch; margin: 0.6rem 0 1.2rem; }
 
+/* Entry list on a UseCase page — title row plus cataloger summary preview
+   (middle layer between use-case → entry detail). */
+.uc-entry-list { list-style: none; padding: 0; margin: 0.6rem 0 1.5rem; }
+.uc-entry-row { padding: 0.6rem 0.2rem; border-bottom: 1px solid var(--hairline); }
+.uc-entry-row:last-child { border-bottom: none; }
+.uc-entry-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.5rem; }
+.uc-entry-title { font-family: var(--font-serif); font-size: 1.08rem; text-decoration: none; color: var(--fg); }
+.uc-entry-title:hover { color: var(--accent-strong); text-decoration: underline; }
+.uc-entry-meta { margin-left: auto; font-family: var(--font-mono); font-size: 0.8rem; }
+.uc-entry-summary { margin: 0.35rem 0 0 0.4rem; padding: 0.4rem 0.7rem; border-left: 2px solid var(--hairline);
+                    background: var(--surface); border-radius: 4px; font-size: 0.92rem; max-width: 80ch; }
+.uc-entry-summary-title { font-weight: 600; margin-bottom: 0.2rem; color: var(--muted); font-size: 0.85rem; }
+.uc-entry-summary-body { white-space: pre-wrap; color: var(--fg); }
+
 /* Language toggle in the header */
 .lang-toggle { font-size: 0.85rem; }
 .pager-info { font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); }

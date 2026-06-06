@@ -280,6 +280,9 @@ type pageCtx struct {
 	EntryTriggers []store.IndexedTrigger
 	EntryUseCases []*store.EntryUseCase // UseCases this entry belongs to
 	UseCase       *store.UseCase         // for /use_cases/{ref} detail page
+	UseCaseParent *store.UseCase         // for breadcrumb on detail page
+	UseCaseChildren []*store.UseCaseSummary // for tree drilldown on detail page
+	EntrySummaries  map[string]*store.Entry // entry_id → cataloger summary (if any)
 
 	// Phase 5 — chat
 	ChatThreads      []*store.ChatThread
@@ -875,6 +878,27 @@ func (h *Handler) useCasePage(w http.ResponseWriter, r *http.Request) {
 	pc.UseCase = uc
 	pc.Entries = entries
 	pc.Pagination = buildPagination(r, total, page, pageSize)
+
+	// Tree context: breadcrumb parent + drilldown children.
+	if uc.ParentID != "" {
+		if p, pErr := h.Store.GetUseCase(r.Context(), uc.ParentID); pErr == nil {
+			pc.UseCaseParent = p
+		}
+	}
+	if kids, _, kErr := h.Store.ListUseCases(r.Context(),
+		store.UseCaseFilter{ParentID: uc.ID}, 200, 0); kErr == nil && len(kids) > 0 {
+		pc.UseCaseChildren = kids
+	}
+
+	// Summary middle layer: for each linked entry, fetch its cataloger
+	// summary (if any) so the use-case page can show a 1-paragraph blurb
+	// per entry without the user having to click through to the entry.
+	pc.EntrySummaries = make(map[string]*store.Entry, len(entries))
+	for _, e := range entries {
+		if sum, sErr := h.Store.EntrySummary(r.Context(), e.ID); sErr == nil && sum != nil {
+			pc.EntrySummaries[e.ID] = sum
+		}
+	}
 	h.render(w, "use_case", pc)
 }
 
@@ -912,9 +936,17 @@ func (h *Handler) lookupPage(w http.ResponseWriter, r *http.Request) {
 	case "use_case":
 		const pageSize = 30
 		page := pageParam(r)
-		list, total, err := h.Store.ListUseCases(r.Context(), store.UseCaseFilter{
+		// Tree-aware default: with no query/domain filter, show only the
+		// top level (parent_id IS NULL) so growth stays browsable. The
+		// user drills down by clicking a META row. When a query is set
+		// we flatten and search across all levels.
+		filter := store.UseCaseFilter{
 			ProjectID: project, Domain: domain, Query: q,
-		}, pageSize, (page-1)*pageSize)
+		}
+		if q == "" {
+			filter.Level = "top"
+		}
+		list, total, err := h.Store.ListUseCases(r.Context(), filter, pageSize, (page-1)*pageSize)
 		if err != nil {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return

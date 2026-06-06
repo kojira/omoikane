@@ -113,6 +113,45 @@ curl -sX POST "<base-url>/v1/lookup/by-symptom" \
   -d '{"symptom_description":"<observed symptom>"}'
 ```
 
+### 2b. Browse by use-case (problem-kind navigation)
+
+`omoikane` organises entries under bilingual **UseCase** rows (problem
+kinds, e.g. "Weak mouth articulation" / "口の動きが弱い"). UseCases form
+a **tree** (`parent_id`) — META categories sit above leaf use-cases.
+
+```bash
+# Top-level browse — META + standalone leaves (one screen).
+curl -s "<base-url>/v1/use_cases?level=top" \
+  -H "Authorization: Bearer <api-key>"
+
+# Drill into one node — get its children (if any) and linked entries.
+curl -s "<base-url>/v1/use_cases/<id-or-slug>" \
+  -H "Authorization: Bearer <api-key>"
+
+# Same node, just its direct children:
+curl -s "<base-url>/v1/use_cases?parent_id=<id>" \
+  -H "Authorization: Bearer <api-key>"
+```
+
+Use this when you're scoping a problem space ("what kinds of things
+does omoikane know about for X?") before you have a specific query.
+
+### 2c. Read the summary first, body second
+
+Every substantive entry that the cataloger has processed has a
+**summary entry** (`metadata.kind=cataloger_summary`) attached. The
+summary is denser and usually enough to decide whether the source
+entry is worth opening:
+
+```bash
+# Returns the latest cataloger summary for an entry, or 404 if none.
+curl -s "<base-url>/v1/entries/<id>/summary" \
+  -H "Authorization: Bearer <api-key>"
+```
+
+Fall back to `GET /v1/entries/<id>` only when no summary exists or
+you need a quote / code block / specific line.
+
 ### 3. After solving a non-trivial problem
 
 ```bash
