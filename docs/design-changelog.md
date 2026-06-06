@@ -11,6 +11,39 @@
 
 ---
 
+## v0.17(2026-06-06)
+
+### 背景
+
+§23.15.4 で UseCase を第一級リソース化したあと、indexer が走るほど top-level UseCase が増え、`/lookup` 一覧が一画面に収まらなくなった(本番で 45 行)。データが増えるほど人間が「omoikane に何がカバーされているか」を把握しにくくなり、カテゴリの体をなさない。同時に、エージェントから見ても「本文を毎回読む」のは UseCase 判定の粒度を不安定にしていた(cataloger 要約があるのに使われていない)。
+
+### 変更点
+
+- §23.15.5(新設): UseCase を **ボトムアップでツリー化**。
+  - `use_cases.parent_id` 自己参照(`ON DELETE SET NULL`)を追加(migration 020)。
+  - API: `?level=top` / `?parent_id=<id>` のフィルタ、`UseCaseSummary.child_count`、`POST /v1/use_cases` の `parent_id` 受理(slug 一致行は parent だけ書き換える upsert)、`GET /v1/use_cases/{ref}` レスポンスに `parent` と `children`。
+  - Indexer **Tidy mode**: 各 session の Step 0 で `?level=top` 件数を見て > 20 なら steps 1-3 を**スキップ**して top の意味的クラスタリング → メタ作成 → 葉の `parent_id` 付け替えのみ行う。葉は決して移動・改名しない。同じルールが何段でも回る("大/中/小"を固定しない)。
+  - 新 endpoint `GET /v1/entries/{id}/summary` — `metadata.kind=cataloger_summary` & `source_entry_id=<id>` を最新のものから 1 件返す。Phase 5 で要約は **DRAFT** 書き込みなので status は SUPERSEDED/ARCHIVED/DUPLICATE のみ除外。
+  - Dashboard `/lookup` default を top-only に、`/use_cases/{ref}` に親パンくず + 子サブカテゴリ + エントリごとの要約プレビュー inline(中間層)。
+  - skill.md を 0.7.0 に bump、`?level=top` ドリルダウンと `/v1/entries/{id}/summary` の二段読みを agent 向けに明文化。
+
+### 設計判断の根拠
+
+- **ボトムアップ採用の理由**: トップダウン分類(先に大カテゴリを切る)は、後から見つかった概念がうまく収まらず親を作り直す事故が起きやすい。葉は不変に保ち、メタを後付けで上に積む方が、データの実際の散らばりに沿って分類が育つ。slug を不変にすることで、エントリリンクが切れる事故も封じる。
+- **「大/中/小」を固定しない**: 階層の深さを設計時に切ると、データ量によって右と左で適切な階層数が違うときに歪む。「今 top にあるものが何であれ閾値超なら上に積む」だけのルールで再帰的に成立する。
+- **Tidy mode を Step 0 に昇格**: 末尾にセクションがあるだけだと、indexer は通常 mode で「新エントリなし → exit 0」の経路で抜けてしまい、top の rebalance が永遠に走らない。Step 0 として明示し、tidy が必要ならその回は通常 mode を**まるごとスキップ**する(新エントリ backlog は次 tick で十分)。
+- **Phase 5 DRAFT を summary endpoint で受理**: cataloger は Phase 5 では要約も DRAFT で書く(observation mode)。ACTIVE 限定では summary endpoint が常に 404 を返す。派生メタの読み込みは status を限定しない方が運用上自然。
+- **Dashboard の要約 inline**: 「カテゴリ → 記事タイトル → クリックして本文」の 3 段は人間にとって深すぎる。UseCase 詳細ページに cataloger 要約のプレビューを inline で出して 1 段省く。
+
+### 影響範囲
+
+- DB: migration 020 を未適用環境は起動時に自動適用。`parent_id` は既存行で NULL のまま動くので破壊的影響なし。
+- API: `?level=top` / `?parent_id` は追加クエリ。既定動作(filter なし)は全件返す形を維持。`/v1/use_cases/{ref}` レスポンスに `parent`/`children` キーを追加(既存クライアントは未参照)。
+- Indexer: SKILL の Step 0 が増えるだけで、Step 1-3 のロジックは互換。Tidy mode 中は新エントリ取り込みが 1 tick 止まる(次の 90 分で復帰)。
+- Dashboard: `/lookup` の default 表示行が変わる。クエリを入れたユーザは従来どおり全 UseCase を flat 検索できる。
+
+---
+
 ## v0.10(2026-06-01)
 
 ### 背景

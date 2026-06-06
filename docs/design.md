@@ -1,10 +1,14 @@
 # Agent Knowledge Base — 設計書
 
-**バージョン**: 0.16
+**バージョン**: 0.17
 **対象実装環境**: Claude Code(自律実装エージェント)
 **読み手**: 実装エージェント、後続の保守者
-**最終更新**: 2026-06-04
+**最終更新**: 2026-06-06
 **変更履歴**: [docs/design-changelog.md](design-changelog.md) 参照
+
+**v0.17 の主な変更(v0.16 からの差分)**:
+
+- §23.15.5: **UseCase をボトムアップでツリー化**。`parent_id` 自己参照を追加し、top-level の行数が閾値(20)を超えたら indexer の **Tidy mode** がメタ UseCase を上に積んで葉を付け替える。葉は不変。`/lookup` は default で top-level のみ、ドリルダウンで子+エントリ+要約(中間層)を見せる。新エンドポイント `GET /v1/entries/{id}/summary`(cataloger_summary を最短取得、Phase 5 DRAFT も対象)で「要約 → 必要なら本文」の二段読みを成立させる。skill.md 0.7.0。
 
 **v0.16 の主な変更(v0.15 からの差分)**:
 
@@ -1820,6 +1824,41 @@ CREATE TABLE use_case_entries (
 **Dashboard `/lookup`**: 一覧の主役を UseCase 名(現行言語)に。1段クリックで関連エントリ展開。記事タイトルは小さく副次的に。エントリ詳細の「🔎 逆引き索引」も「所属する UseCase」のチップに切り替え。
 
 **Cataloger との境界**(updated): cataloger=要約/タグ/階層/situation。indexer=UseCase の抽出と紐付け。`situations`(エントリ集合の "場面")と UseCase(問題類型)は別概念で、書き込み先が異なる。
+
+#### 23.15.5 UseCase ツリー — ボトムアップでメタを積む
+
+**問題(§23.15.4 運用で判明)**: UseCase は当初フラットな一覧として設計したが、indexer が走るほど top-level の行数が増え、`/lookup` 一覧が一画面に収まらなくなる。データが増えるほど人間が「omoikane に何がカバーされているか」を把握しにくくなり、結局カテゴリの体をなさない。
+
+**設計**: UseCase に **自己参照 `parent_id`** を持たせ、UseCase 自体をツリー化する。ただし**ボトムアップ**で育てる:
+
+- 葉(リーフ UseCase)は決して移動・改名しない。slug が安定で、エントリとのリンクも保たれる。
+- top-level の数が閾値(現状 20)を超えたら、**既存の葉を分類するメタ UseCase を「上に」追加**して、葉の `parent_id` を新メタに付け替える。
+- メタ UseCase 自身も増えたら同じルールで META-of-META を上に積む。**「大カテゴリ/中カテゴリ/小カテゴリ」を固定で決めない** — 今 top にあるものが何であれ、同じ rule で圧縮する。
+
+```sql
+ALTER TABLE use_cases ADD COLUMN parent_id TEXT REFERENCES use_cases(id) ON DELETE SET NULL;
+CREATE INDEX idx_use_cases_parent ON use_cases(parent_id);
+```
+
+`ON DELETE SET NULL`: メタを消すと子は un-root されるだけで葉自体は残る(リンクされたエントリも安全)。
+
+**API 拡張**:
+- `GET /v1/use_cases?level=top` — `parent_id IS NULL` のみ。デフォルトのトップ一覧。
+- `GET /v1/use_cases?parent_id=<id>` — 直下の子のみ。
+- `GET /v1/use_cases/{ref}` — レスポンスに `children`(直下の子サマリ)と `parent`(解決済みの親)を同梱。
+- `POST /v1/use_cases` — `parent_id` を受理(空文字を渡すと un-root)。slug が一致する既存行に対しては `parent_id` のみ書き換える(葉の名前/説明は変えずに付け替え)。
+- 既存 `UseCaseSummary` に `child_count`(直下の子数)を追加。`entry_count` は変わらず**直接リンクのみ**(派生集計は UI 側で再帰しない)。
+
+**Indexer の「Tidy mode」**: 通常 mode は変えず(エントリ → 葉 UseCase の抽出/紐付け)、各 session 開始時に **Step 0** として `?level=top` の件数を見る。20 を超えていれば Tidy mode に切り替え、その回は steps 1-3 を**スキップ**して top の意味的クラスタリング → 5-10 のメタ作成 → 葉の `parent_id` 付け替えだけを行う。新エントリ backlog は次 tick に回す。同じルールが何段でも回る。
+
+**サマリ中間層(`/entries/{id}/summary`)**: cataloger が書く `metadata.kind=cataloger_summary` の librarian_meta(`source_entry_id=<元エントリ>`)を「そのエントリの要約」として最短で返すエンドポイント。Phase 5 で要約は **DRAFT** で書かれるため、status は ACTIVE/DRAFT どちらでも返す(SUPERSEDED/ARCHIVED/DUPLICATE のみ除外)。これにより indexer は「本文ではなく要約を読んで UseCase を判定する」ことができ、判定の安定性が上がる。
+
+**Dashboard `/lookup` のフロー**:
+1. `/lookup` → top-level のみ(メタ + 独立葉)、各行に `📁 N children` / `📄 N entries`。
+2. クリック → `/use_cases/{slug}`:親パンくず + サブカテゴリ一覧 + 直接リンクされたエントリ一覧(各エントリに cataloger 要約のプレビューを inline 表示)。
+3. エントリタイトルクリック → 元エントリ詳細。
+
+**Phase 5 直接書き(継続)**: `parent_id` の書き換えは UseCase 行の派生メタ更新であり、引き続き indexer の sanctioned 直接書きの範囲内。
 
 #### 23.15.3 Indexer — 逆引きインデックスの供給(死蔵の解消)
 
