@@ -211,3 +211,84 @@ func TestListUseCasesSummaryAndPaging(t *testing.T) {
 		t.Fatalf("page2: want 1, got %d", len(page2))
 	}
 }
+
+func TestUseCaseTree(t *testing.T) {
+	s, _ := seed(t)
+	ctx := context.Background()
+
+	// 3 leaves
+	a, _ := s.UpsertUseCase(ctx, &UseCase{NameJA: "葉A", NameEN: "Leaf A"})
+	b, _ := s.UpsertUseCase(ctx, &UseCase{NameJA: "葉B", NameEN: "Leaf B"})
+	c, _ := s.UpsertUseCase(ctx, &UseCase{NameJA: "葉C", NameEN: "Leaf C"})
+
+	// All three start as top-level.
+	top, total, err := s.ListUseCases(ctx, UseCaseFilter{Level: "top"}, 10, 0)
+	if err != nil || total != 3 {
+		t.Fatalf("level=top initial: total=%d err=%v", total, err)
+	}
+	for _, r := range top {
+		if r.ParentID != "" {
+			t.Errorf("expected empty parent_id for %s, got %q", r.ID, r.ParentID)
+		}
+		if r.ChildCount != 0 {
+			t.Errorf("expected ChildCount=0 for %s, got %d", r.ID, r.ChildCount)
+		}
+	}
+
+	// Stack a meta above A and B.
+	meta, _ := s.UpsertUseCase(ctx, &UseCase{NameJA: "メタAB", NameEN: "Meta AB"})
+	if err := s.SetUseCaseParent(ctx, a.ID, meta.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetUseCaseParent(ctx, b.ID, meta.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	// Top-level now: meta + C (not a, not b).
+	top, total, _ = s.ListUseCases(ctx, UseCaseFilter{Level: "top"}, 10, 0)
+	if total != 2 {
+		t.Fatalf("level=top after meta stack: want 2, got %d", total)
+	}
+	ids := map[string]int{}
+	for _, r := range top {
+		ids[r.ID] = r.ChildCount
+	}
+	if _, ok := ids[meta.ID]; !ok || ids[meta.ID] != 2 {
+		t.Errorf("meta should be top-level with ChildCount=2, got %v", ids)
+	}
+	if _, ok := ids[c.ID]; !ok {
+		t.Errorf("c should still be top-level, got %v", ids)
+	}
+	if _, ok := ids[a.ID]; ok {
+		t.Errorf("a should NOT be top-level after parent stacking, got %v", ids)
+	}
+
+	// Drill down into meta.
+	children, total, _ := s.ListUseCases(ctx, UseCaseFilter{ParentID: meta.ID}, 10, 0)
+	if total != 2 || len(children) != 2 {
+		t.Fatalf("children of meta: want 2, got %d", total)
+	}
+	childIDs := map[string]bool{children[0].ID: true, children[1].ID: true}
+	if !childIDs[a.ID] || !childIDs[b.ID] {
+		t.Errorf("children should be a,b: got %v", childIDs)
+	}
+	for _, ch := range children {
+		if ch.ParentID != meta.ID {
+			t.Errorf("child %s parent_id: want %s, got %s", ch.ID, meta.ID, ch.ParentID)
+		}
+	}
+
+	// Un-rooting back to top.
+	if err := s.SetUseCaseParent(ctx, a.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := s.GetUseCase(ctx, a.ID)
+	if got.ParentID != "" {
+		t.Fatalf("after un-root: want empty parent, got %q", got.ParentID)
+	}
+
+	// A cannot be its own parent.
+	if err := s.SetUseCaseParent(ctx, a.ID, a.ID); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("self-parent: want ErrInvalidInput, got %v", err)
+	}
+}

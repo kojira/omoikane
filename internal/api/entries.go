@@ -573,3 +573,28 @@ func parseIfMatch(v string) (int, error) {
 	return strconv.Atoi(v)
 }
 
+
+// summaryEntry returns the cataloger summary (a librarian_meta with
+// metadata.kind=cataloger_summary and metadata.source_entry_id=<id>) for the
+// target entry. This is the canonical "summary layer" between a category
+// drilldown and the raw source entry — the dashboard's tree navigation
+// fetches this for the mid-level page; agents fetch it when they want the
+// gist before reading the body.
+//
+// Returns 404 when no summary has been written yet (the entry pre-dates
+// the cataloger, or the cataloger hasn't reached it). Falls back gracefully
+// — callers should treat 404 as "use the entry body directly".
+func (h *Handler) summaryEntry(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	// Verify the source entry actually exists (clean 404 either way).
+	if _, err := h.Store.GetEntry(httpCtx(r), id); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	sum, err := h.Store.EntrySummary(httpCtx(r), id)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, entryWithFeedbackPrompt(sum))
+}

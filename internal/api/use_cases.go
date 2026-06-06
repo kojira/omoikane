@@ -25,6 +25,7 @@ type useCaseUpsertReq struct {
 	DescriptionEN string `json:"description_en,omitempty"`
 	Domain        string `json:"domain,omitempty"`
 	Source        string `json:"source,omitempty"`
+	ParentID      string `json:"parent_id,omitempty"`
 }
 
 type useCaseJSON struct {
@@ -36,6 +37,7 @@ type useCaseJSON struct {
 	DescriptionEN string    `json:"description_en"`
 	Domain        string    `json:"domain,omitempty"`
 	Source        string    `json:"source"`
+	ParentID      string    `json:"parent_id,omitempty"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }
@@ -44,15 +46,16 @@ func toUseCaseJSON(uc *store.UseCase) useCaseJSON {
 	return useCaseJSON{
 		ID: uc.ID, Slug: uc.Slug, NameJA: uc.NameJA, NameEN: uc.NameEN,
 		DescriptionJA: uc.DescriptionJA, DescriptionEN: uc.DescriptionEN,
-		Domain: uc.Domain, Source: uc.Source,
+		Domain: uc.Domain, Source: uc.Source, ParentID: uc.ParentID,
 		CreatedAt: uc.CreatedAt, UpdatedAt: uc.UpdatedAt,
 	}
 }
 
 type useCaseSummaryJSON struct {
 	useCaseJSON
-	EntryCount    int                       `json:"entry_count"`
-	SampleEntries []useCaseSampleEntryJSON  `json:"sample_entries,omitempty"`
+	EntryCount    int                      `json:"entry_count"`
+	ChildCount    int                      `json:"child_count"`
+	SampleEntries []useCaseSampleEntryJSON `json:"sample_entries,omitempty"`
 }
 
 type useCaseSampleEntryJSON struct {
@@ -92,6 +95,7 @@ func (h *Handler) upsertUseCase(w http.ResponseWriter, r *http.Request) {
 		DescriptionEN: req.DescriptionEN,
 		Domain:        req.Domain,
 		Source:        req.Source,
+		ParentID:      req.ParentID,
 	})
 	if err != nil {
 		writeStoreError(w, err)
@@ -116,6 +120,8 @@ func (h *Handler) listUseCases(w http.ResponseWriter, r *http.Request) {
 		ProjectID: q.Get("project"),
 		Domain:    q.Get("domain"),
 		Query:     q.Get("q"),
+		Level:     q.Get("level"),     // "" | "top" | "all"
+		ParentID:  q.Get("parent_id"), // when set, returns direct children only
 	}, limit, offset)
 	if err != nil {
 		writeStoreError(w, err)
@@ -126,6 +132,7 @@ func (h *Handler) listUseCases(w http.ResponseWriter, r *http.Request) {
 		row := useCaseSummaryJSON{
 			useCaseJSON: toUseCaseJSON(&s.UseCase),
 			EntryCount:  s.EntryCount,
+			ChildCount:  s.ChildCount,
 		}
 		for _, e := range s.SampleEntries {
 			row.SampleEntries = append(row.SampleEntries, useCaseSampleEntryJSON{
@@ -159,8 +166,32 @@ func (h *Handler) getUseCase(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, err)
 		return
 	}
+	// Tree context — parent (if any) + direct children. Lets a tree-aware
+	// caller draw the breadcrumb and the drilldown without a second round trip.
+	var parent *useCaseJSON
+	if uc.ParentID != "" {
+		if p, err := h.Store.GetUseCase(httpCtx(r), uc.ParentID); err == nil && p != nil {
+			j := toUseCaseJSON(p)
+			parent = &j
+		}
+	}
+	childSums, _, err := h.Store.ListUseCases(httpCtx(r), store.UseCaseFilter{ParentID: uc.ID}, 200, 0)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	children := make([]useCaseSummaryJSON, 0, len(childSums))
+	for _, c := range childSums {
+		children = append(children, useCaseSummaryJSON{
+			useCaseJSON: toUseCaseJSON(&c.UseCase),
+			EntryCount:  c.EntryCount,
+			ChildCount:  c.ChildCount,
+		})
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"use_case":      toUseCaseJSON(uc),
+		"parent":        parent,
+		"children":      children,
 		"entries":       entries,
 		"entries_total": total,
 		"limit":         limit,

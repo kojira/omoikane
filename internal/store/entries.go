@@ -890,3 +890,25 @@ func decodeTagsSnapshot(s string) []string {
 	}
 	return strings.Split(s, ";")
 }
+
+// EntrySummary returns the cataloger's summary entry for `entryID`, if one
+// exists. A summary is a librarian_meta entry with metadata.kind=cataloger_summary
+// and metadata.source_entry_id matching the target.
+//
+// Returns ErrNotFound when no cataloger summary has been written for this
+// entry yet (the indexer / dashboard then falls back to the entry itself).
+func (s *Store) EntrySummary(ctx context.Context, entryID string) (*Entry, error) {
+	var id string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id FROM entries
+		 WHERE type = 'librarian_meta'
+		   AND status = 'ACTIVE'
+		   AND json_extract(metadata, '$.kind') = 'cataloger_summary'
+		   AND json_extract(metadata, '$.source_entry_id') = ?
+		 ORDER BY created_at DESC
+		 LIMIT 1`, entryID).Scan(&id)
+	if err != nil {
+		return nil, translateErr(err)
+	}
+	return s.GetEntry(ctx, id)
+}

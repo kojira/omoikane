@@ -150,3 +150,86 @@ func TestUseCaseRejectsMissingNames(t *testing.T) {
 		t.Fatalf("expected 400, got %d %s", s, raw)
 	}
 }
+
+func TestUseCaseTreeAPI(t *testing.T) {
+	base, tok, st := testServer(t)
+	ctx := context.Background()
+	if err := st.CreateProject(ctx, &store.Project{ID: "kb", Name: "KB"}); err != nil { t.Fatal(err) }
+
+	// Three top-level UseCases via API.
+	for _, n := range []struct{ ja, en string }{
+		{"葉A","Leaf A"},{"葉B","Leaf B"},{"葉C","Leaf C"},
+	} {
+		s, raw := doJSON(t, "POST", base+"/v1/use_cases", tok, map[string]any{
+			"name_ja": n.ja, "name_en": n.en,
+		}, nil)
+		if s != 200 { t.Fatalf("upsert %s: %d %s", n.en, s, raw) }
+	}
+
+	// level=top → 3 rows.
+	s, raw := doJSON(t, "GET", base+"/v1/use_cases?level=top", tok, nil, nil)
+	if s != 200 { t.Fatalf("list level=top: %d %s", s, raw) }
+	var listed struct {
+		Total int `json:"total"`
+		UseCases []struct{
+			ID, Slug string
+			ChildCount int `json:"child_count"`
+			ParentID string `json:"parent_id"`
+		} `json:"use_cases"`
+	}
+	json.Unmarshal(raw, &listed)
+	if listed.Total != 3 { t.Fatalf("top initial total: %d", listed.Total) }
+	for _, r := range listed.UseCases {
+		if r.ParentID != "" { t.Errorf("expected empty parent_id, got %q", r.ParentID) }
+		if r.ChildCount != 0 { t.Errorf("expected ChildCount=0, got %d", r.ChildCount) }
+	}
+
+	// Stack a meta above Leaf A and Leaf B (parent_id on upsert).
+	leafA := listed.UseCases[2] // alphabetical-ish via test seed; just pick one
+	leafB := listed.UseCases[1]
+	// Create meta first.
+	s, raw = doJSON(t, "POST", base+"/v1/use_cases", tok, map[string]any{
+		"name_ja":"メタAB","name_en":"Meta AB",
+	}, nil)
+	if s != 200 { t.Fatalf("create meta: %d %s", s, raw) }
+	var metaRes struct{ ID string `json:"id"` }
+	json.Unmarshal(raw, &metaRes)
+	// Re-upsert leaves with parent_id (same slug → server updates parent_id).
+	for _, leaf := range []struct{ slug, en string }{
+		{leafA.Slug, "Leaf "+leafA.Slug[len(leafA.Slug)-1:]},
+		{leafB.Slug, "Leaf "+leafB.Slug[len(leafB.Slug)-1:]},
+	} {
+		s, raw = doJSON(t, "POST", base+"/v1/use_cases", tok, map[string]any{
+			"slug": leaf.slug, "name_ja":"葉(再)", "name_en": leaf.en,
+			"parent_id": metaRes.ID,
+		}, nil)
+		if s != 200 { t.Fatalf("repoint %s: %d %s", leaf.slug, s, raw) }
+	}
+
+	// level=top now returns meta + leafC.
+	s, raw = doJSON(t, "GET", base+"/v1/use_cases?level=top", tok, nil, nil)
+	json.Unmarshal(raw, &listed)
+	if listed.Total != 2 { t.Fatalf("after stack: top total %d", listed.Total) }
+	gotMetaWithChildren := false
+	for _, r := range listed.UseCases {
+		if r.ID == metaRes.ID && r.ChildCount == 2 { gotMetaWithChildren = true }
+	}
+	if !gotMetaWithChildren { t.Errorf("meta should be top-level with ChildCount=2: %+v", listed.UseCases) }
+
+	// GET meta — includes children[].
+	s, raw = doJSON(t, "GET", base+"/v1/use_cases/"+metaRes.ID, tok, nil, nil)
+	if s != 200 { t.Fatalf("get meta: %d %s", s, raw) }
+	var detail struct{
+		UseCase  map[string]any   `json:"use_case"`
+		Parent   any              `json:"parent"`
+		Children []map[string]any `json:"children"`
+	}
+	json.Unmarshal(raw, &detail)
+	if detail.Parent != nil { t.Errorf("meta parent should be nil, got %v", detail.Parent) }
+	if len(detail.Children) != 2 { t.Errorf("meta children: want 2, got %d", len(detail.Children)) }
+
+	// ?parent_id= drilldown.
+	s, raw = doJSON(t, "GET", base+"/v1/use_cases?parent_id="+metaRes.ID, tok, nil, nil)
+	json.Unmarshal(raw, &listed)
+	if listed.Total != 2 { t.Fatalf("drilldown count: want 2, got %d", listed.Total) }
+}

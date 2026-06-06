@@ -12,6 +12,14 @@ import (
 
 // UseCase is a first-class "kind of problem omoikane covers". See
 // design.md §23.15.4. Many-to-many with entries via use_case_entries.
+//
+// ParentID is the self-referential link that makes use_cases a tree.
+// The growth pattern is BOTTOM-UP: leaves (concrete categories close to
+// entries) come first, and the indexer's "tidy" mode periodically stacks
+// META categories ABOVE the leaves when the top-level count gets too
+// high to browse. The same rule applies at any level — meta of meta,
+// meta of meta of meta — so the tree deepens as the corpus grows
+// without anyone having to predefine "large / medium / small".
 type UseCase struct {
 	ID            string
 	Slug          string
@@ -21,15 +29,18 @@ type UseCase struct {
 	DescriptionEN string
 	Domain        string
 	Source        string
+	ParentID      string // empty = top-level (root)
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 }
 
 // UseCaseSummary is one row of the /lookup browse list: a UseCase plus
-// its entry count and a small sample of linked entries.
+// its entry count, child count (for tree drilldown), and a small sample
+// of linked entries.
 type UseCaseSummary struct {
 	UseCase
 	EntryCount    int
+	ChildCount    int // direct children (parent_id = this.id)
 	SampleEntries []UseCaseSampleEntry
 }
 
@@ -52,6 +63,13 @@ type UseCaseFilter struct {
 	ProjectID string // restrict to UseCases that have at least one entry in this project
 	Domain    string
 	Query     string // matches name_ja or name_en (LIKE)
+
+	// Tree filters — Level and ParentID are interchangeable views of the
+	// same dimension; set at most one. Level="top" → parent_id IS NULL.
+	// Level="all" or zero-value → no parent filter. ParentID set → only
+	// direct children of that node.
+	Level    string // "" | "top" | "all"
+	ParentID string
 }
 
 // ------------------------------------------------------------------
@@ -126,17 +144,36 @@ func (s *Store) UpsertUseCase(ctx context.Context, uc *UseCase) (*UseCase, error
 		return nil, err
 	}
 	if existing != nil {
-		_, err := s.db.ExecContext(ctx, `
-			UPDATE use_cases
-			   SET name_ja = ?, name_en = ?,
-			       description_ja = ?, description_en = ?,
-			       domain = ?, source = ?,
-			       updated_at = CURRENT_TIMESTAMP
-			 WHERE id = ?`,
-			uc.NameJA, uc.NameEN, uc.DescriptionJA, uc.DescriptionEN,
-			nullable(uc.Domain), uc.Source, existing.ID)
-		if err != nil {
-			return nil, translateErr(err)
+		// parent_id semantics on upsert: if the caller explicitly supplied
+		// one, we honour it; otherwise we leave the existing parent in
+		// place (so an indexer re-running an old leaf doesn't yank it out
+		// of the tree the tidy mode placed it in).
+		if uc.ParentID != "" {
+			_, err := s.db.ExecContext(ctx, `
+				UPDATE use_cases
+				   SET name_ja = ?, name_en = ?,
+				       description_ja = ?, description_en = ?,
+				       domain = ?, source = ?, parent_id = ?,
+				       updated_at = CURRENT_TIMESTAMP
+				 WHERE id = ?`,
+				uc.NameJA, uc.NameEN, uc.DescriptionJA, uc.DescriptionEN,
+				nullable(uc.Domain), uc.Source, uc.ParentID, existing.ID)
+			if err != nil {
+				return nil, translateErr(err)
+			}
+		} else {
+			_, err := s.db.ExecContext(ctx, `
+				UPDATE use_cases
+				   SET name_ja = ?, name_en = ?,
+				       description_ja = ?, description_en = ?,
+				       domain = ?, source = ?,
+				       updated_at = CURRENT_TIMESTAMP
+				 WHERE id = ?`,
+				uc.NameJA, uc.NameEN, uc.DescriptionJA, uc.DescriptionEN,
+				nullable(uc.Domain), uc.Source, existing.ID)
+			if err != nil {
+				return nil, translateErr(err)
+			}
 		}
 		return s.GetUseCase(ctx, existing.ID)
 	}
@@ -151,14 +188,35 @@ func (s *Store) UpsertUseCase(ctx context.Context, uc *UseCase) (*UseCase, error
 	}
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO use_cases
-		    (id, slug, name_ja, name_en, description_ja, description_en, domain, source)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		    (id, slug, name_ja, name_en, description_ja, description_en, domain, source, parent_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		uc.ID, uc.Slug, uc.NameJA, uc.NameEN,
-		uc.DescriptionJA, uc.DescriptionEN, nullable(uc.Domain), uc.Source)
+		uc.DescriptionJA, uc.DescriptionEN, nullable(uc.Domain), uc.Source,
+		nullable(uc.ParentID))
 	if err != nil {
 		return nil, translateErr(err)
 	}
 	return s.GetUseCase(ctx, uc.ID)
+}
+
+// SetUseCaseParent rewrites a UseCase's parent. Pass empty parentID to
+// promote it back to top-level. The indexer's "tidy" mode calls this in
+// batches when it stacks meta categories above existing leaves.
+func (s *Store) SetUseCaseParent(ctx context.Context, useCaseID, parentID string) error {
+	if useCaseID == "" {
+		return fmt.Errorf("%w: use_case_id required", ErrInvalidInput)
+	}
+	if useCaseID == parentID {
+		return fmt.Errorf("%w: a use_case cannot be its own parent", ErrInvalidInput)
+	}
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE use_cases
+		   SET parent_id = ?, updated_at = CURRENT_TIMESTAMP
+		 WHERE id = ?`, nullable(parentID), useCaseID)
+	if err != nil {
+		return translateErr(err)
+	}
+	return nil
 }
 
 // GetUseCase returns a UseCase by id, or ErrNotFound.
@@ -173,18 +231,21 @@ func (s *Store) GetUseCaseBySlug(ctx context.Context, slug string) (*UseCase, er
 
 func (s *Store) queryUseCase(ctx context.Context, whereSQL string, arg any) (*UseCase, error) {
 	uc := &UseCase{}
-	var domain *string
+	var domain, parent *string
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, slug, name_ja, name_en, description_ja, description_en,
-		       COALESCE(domain,''), source, created_at, updated_at
+		       COALESCE(domain,''), source, parent_id, created_at, updated_at
 		  FROM use_cases `+whereSQL, arg).Scan(
 		&uc.ID, &uc.Slug, &uc.NameJA, &uc.NameEN, &uc.DescriptionJA, &uc.DescriptionEN,
-		&domain, &uc.Source, &uc.CreatedAt, &uc.UpdatedAt)
+		&domain, &uc.Source, &parent, &uc.CreatedAt, &uc.UpdatedAt)
 	if err != nil {
 		return nil, translateErr(err)
 	}
 	if domain != nil {
 		uc.Domain = *domain
+	}
+	if parent != nil {
+		uc.ParentID = *parent
 	}
 	return uc, nil
 }
@@ -257,6 +318,14 @@ func (s *Store) ListUseCases(ctx context.Context, f UseCaseFilter, limit, offset
 			"EXISTS (SELECT 1 FROM use_case_entries uce JOIN entries e ON e.id = uce.entry_id WHERE uce.use_case_id = uc.id AND e.project_id = ?)")
 		args = append(args, f.ProjectID)
 	}
+	// Tree filters — ParentID wins if both are set (more specific).
+	switch {
+	case f.ParentID != "":
+		conds = append(conds, "uc.parent_id = ?")
+		args = append(args, f.ParentID)
+	case f.Level == "top":
+		conds = append(conds, "uc.parent_id IS NULL")
+	}
 	where := ""
 	if len(conds) > 0 {
 		where = "WHERE " + strings.Join(conds, " AND ")
@@ -271,8 +340,10 @@ func (s *Store) ListUseCases(ctx context.Context, f UseCaseFilter, limit, offset
 	pageSQL := `
 		SELECT uc.id, uc.slug, uc.name_ja, uc.name_en,
 		       uc.description_ja, uc.description_en,
-		       COALESCE(uc.domain,''), uc.source, uc.created_at, uc.updated_at,
-		       COALESCE((SELECT COUNT(*) FROM use_case_entries WHERE use_case_id = uc.id),0) AS entry_count
+		       COALESCE(uc.domain,''), uc.source, uc.parent_id,
+		       uc.created_at, uc.updated_at,
+		       COALESCE((SELECT COUNT(*) FROM use_case_entries WHERE use_case_id = uc.id),0) AS entry_count,
+		       COALESCE((SELECT COUNT(*) FROM use_cases ch WHERE ch.parent_id = uc.id),0) AS child_count
 		  FROM use_cases uc ` + where + `
 		 ORDER BY uc.updated_at DESC, uc.id
 		 LIMIT ? OFFSET ?`
@@ -287,12 +358,16 @@ func (s *Store) ListUseCases(ctx context.Context, f UseCaseFilter, limit, offset
 	for rows.Next() {
 		var sum UseCaseSummary
 		var domain string
+		var parent *string
 		if err := rows.Scan(&sum.ID, &sum.Slug, &sum.NameJA, &sum.NameEN,
 			&sum.DescriptionJA, &sum.DescriptionEN, &domain, &sum.Source,
-			&sum.CreatedAt, &sum.UpdatedAt, &sum.EntryCount); err != nil {
+			&parent, &sum.CreatedAt, &sum.UpdatedAt, &sum.EntryCount, &sum.ChildCount); err != nil {
 			return nil, 0, err
 		}
 		sum.Domain = domain
+		if parent != nil {
+			sum.ParentID = *parent
+		}
 		out = append(out, &sum)
 	}
 	if err := rows.Err(); err != nil {
@@ -328,7 +403,8 @@ func (s *Store) ListEntryUseCases(ctx context.Context, entryID string) ([]*Entry
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT uc.id, uc.slug, uc.name_ja, uc.name_en,
 		       uc.description_ja, uc.description_en,
-		       COALESCE(uc.domain,''), uc.source, uc.created_at, uc.updated_at,
+		       COALESCE(uc.domain,''), uc.source, uc.parent_id,
+		       uc.created_at, uc.updated_at,
 		       uce.created_at
 		  FROM use_case_entries uce
 		  JOIN use_cases uc ON uc.id = uce.use_case_id
@@ -342,12 +418,16 @@ func (s *Store) ListEntryUseCases(ctx context.Context, entryID string) ([]*Entry
 	for rows.Next() {
 		var r EntryUseCase
 		var domain string
+		var parent *string
 		if err := rows.Scan(&r.ID, &r.Slug, &r.NameJA, &r.NameEN,
 			&r.DescriptionJA, &r.DescriptionEN, &domain, &r.Source,
-			&r.CreatedAt, &r.UpdatedAt, &r.LinkedAt); err != nil {
+			&parent, &r.CreatedAt, &r.UpdatedAt, &r.LinkedAt); err != nil {
 			return nil, err
 		}
 		r.Domain = domain
+		if parent != nil {
+			r.ParentID = *parent
+		}
 		out = append(out, &r)
 	}
 	return out, rows.Err()
