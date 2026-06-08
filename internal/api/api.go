@@ -118,6 +118,7 @@ func (h *Handler) Mount(r chi.Router) {
 			r.With(auth.RequireScope("write")).Post("/use_cases/{ref}/entries", h.linkUseCaseEntry)
 			r.With(auth.RequireScope("write")).Delete("/use_cases/{ref}/entries/{entryID}", h.unlinkUseCaseEntry)
 			r.With(auth.RequireScope("write")).Delete("/use_cases/{ref}", h.deleteUseCase)
+			r.With(auth.RequireScope("write")).Post("/use_cases/{ref}/parent", h.setUseCaseParent)
 			r.With(auth.RequireScope("read")).Get("/entries/{id}/use_cases", h.listEntryUseCases)
 			r.With(auth.RequireScope("read")).Get("/entries/{id}/summary", h.summaryEntry)
 

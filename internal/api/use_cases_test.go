@@ -232,6 +232,17 @@ func TestUseCaseTreeAPI(t *testing.T) {
 	s, raw = doJSON(t, "GET", base+"/v1/use_cases?parent_id="+metaRes.ID, tok, nil, nil)
 	json.Unmarshal(raw, &listed)
 	if listed.Total != 2 { t.Fatalf("drilldown count: want 2, got %d", listed.Total) }
+
+	// POST /parent re-parents; empty parent_id un-roots back to top level.
+	// (upsert cannot un-root — it preserves parent on empty — so this
+	// endpoint is the only way back to the top.)
+	s, raw = doJSON(t, "POST", base+"/v1/use_cases/"+leafA.Slug+"/parent", tok,
+		map[string]any{"parent_id": ""}, nil)
+	if s != 200 { t.Fatalf("un-root: %d %s", s, raw) }
+	s, raw = doJSON(t, "GET", base+"/v1/use_cases?level=top", tok, nil, nil)
+	json.Unmarshal(raw, &listed)
+	// meta + leafC + un-rooted leafA = 3 at top level now.
+	if listed.Total != 3 { t.Fatalf("after un-root: top total %d, want 3", listed.Total) }
 }
 
 // TestUseCaseLimitClamps over-limit doesn't get silently dropped to 30.

@@ -41,6 +41,7 @@ whitelist:
     - POST /v1/librarian/progress
     - POST /v1/use_cases
     - POST /v1/use_cases/{ref}/entries
+    - POST /v1/use_cases/{ref}/parent   # re-parent / un-root in tidy mode
     - DELETE /v1/use_cases/{ref}   # prune empty junk leaves in tidy mode
     - POST /v1/entries/{id}/index   # legacy, kept during transition
 

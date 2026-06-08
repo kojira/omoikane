@@ -275,6 +275,49 @@ func (h *Handler) deleteUseCase(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+type setParentReq struct {
+	// ParentID is the new parent. Empty string un-roots the use_case back
+	// to the top level. Using a dedicated endpoint (not upsert) because
+	// upsert intentionally PRESERVES the existing parent when parent_id is
+	// omitted/empty — so it can never un-root. This can.
+	ParentID string `json:"parent_id"`
+}
+
+// setUseCaseParent re-parents a UseCase (or un-roots it with an empty
+// parent_id). The indexer's tidy mode uses this to stack/move leaves.
+func (h *Handler) setUseCaseParent(w http.ResponseWriter, r *http.Request) {
+	ref := chi.URLParam(r, "ref")
+	uc, err := h.resolveUseCaseRef(httpCtx(r), ref)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	var req setParentReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, CodeBadJSON, err.Error(), nil)
+		return
+	}
+	var parentID string
+	if req.ParentID != "" {
+		parent, pErr := h.resolveUseCaseRef(httpCtx(r), req.ParentID)
+		if pErr != nil {
+			writeError(w, http.StatusBadRequest, CodeBadRequest, "parent not found: "+req.ParentID, nil)
+			return
+		}
+		parentID = parent.ID
+	}
+	if err := h.Store.SetUseCaseParent(httpCtx(r), uc.ID, parentID); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	out, err := h.Store.GetUseCase(httpCtx(r), uc.ID)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toUseCaseJSON(out))
+}
+
 // listEntryUseCases returns the UseCases an entry belongs to.
 func (h *Handler) listEntryUseCases(w http.ResponseWriter, r *http.Request) {
 	entryID := chi.URLParam(r, "id")
