@@ -198,6 +198,9 @@ func (h *Handler) Mount(r chi.Router) {
 				r.With(auth.RequireScope("read")).Get("/backlog/next", h.librarianBacklogNext)
 				r.With(auth.RequireScope("librarian")).Post("/progress", h.librarianProgressPost)
 				r.With(auth.RequireScope("read")).Get("/progress", h.librarianProgressList)
+				// Maintenance: clear progress for specific entries so a role
+				// re-processes them (e.g. re-summarise after a template change).
+				r.With(auth.RequireScope("write")).Post("/backlog/reprocess", h.librarianBacklogReprocess)
 
 				r.With(auth.RequireScope("read")).Get("/threads", h.chatListThreads)
 				r.With(auth.RequireScope("write")).Post("/threads", h.chatOpenThread)

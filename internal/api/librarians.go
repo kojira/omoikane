@@ -136,6 +136,38 @@ func (h *Handler) librarianBacklogNext(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// reprocessRequest clears progress for specific entries so a role
+// re-processes them. Maintenance primitive (e.g. re-summarise after a
+// template change). entry_ids is required and bounded — never clears a
+// whole role's history.
+type reprocessRequest struct {
+	Role     string   `json:"role"`
+	EntryIDs []string `json:"entry_ids"`
+}
+
+func (h *Handler) librarianBacklogReprocess(w http.ResponseWriter, r *http.Request) {
+	var req reprocessRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, CodeBadJSON, err.Error(), nil)
+		return
+	}
+	if !store.ValidLibrarianRole(req.Role) {
+		writeError(w, http.StatusBadRequest, CodeBadRequest, "role not recognised",
+			map[string]any{"got": req.Role, "allowed": store.LibrarianRoleSlice()})
+		return
+	}
+	if len(req.EntryIDs) == 0 {
+		writeError(w, http.StatusBadRequest, CodeMissingFields, "entry_ids required (non-empty)", nil)
+		return
+	}
+	n, err := h.Store.ClearProgress(httpCtx(r), req.Role, req.EntryIDs)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"cleared": n, "role": req.Role})
+}
+
 // progressRequest records that a librarian instance has processed
 // (or chose not to act on) an entry. The store records the row and
 // the FIFO query stops returning this entry for this role.

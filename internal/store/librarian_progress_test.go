@@ -59,6 +59,44 @@ func TestNextUnprocessedEntryReturnsOldestFirst(t *testing.T) {
 	}
 }
 
+// ClearProgress puts a processed entry back into the backlog so it
+// gets re-processed (e.g. re-summarise after a template change).
+func TestClearProgressReopensBacklog(t *testing.T) {
+	s := newTestStore(t)
+	ids := seedProgressEntries(t, s, 2)
+	ctx := context.Background()
+
+	// Process both → backlog drains.
+	for _, id := range ids {
+		if err := s.RecordProgress(ctx, &LibrarianProgress{
+			Role: "cataloger", EntryID: id, Action: "summarized",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.NextUnprocessedEntry(ctx, "cataloger", ""); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected drained backlog, got %v", err)
+	}
+
+	// Empty list is a no-op (never wipes the whole role).
+	if n, err := s.ClearProgress(ctx, "cataloger", nil); err != nil || n != 0 {
+		t.Fatalf("empty clear: n=%d err=%v", n, err)
+	}
+
+	// Clear the first → it re-enters the backlog, oldest-first.
+	n, err := s.ClearProgress(ctx, "cataloger", []string{ids[0]})
+	if err != nil || n != 1 {
+		t.Fatalf("clear one: n=%d err=%v", n, err)
+	}
+	got, err := s.NextUnprocessedEntry(ctx, "cataloger", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != ids[0] {
+		t.Errorf("reopened entry: want %s, got %s", ids[0], got.ID)
+	}
+}
+
 // Each role has its own backlog: cataloger's progress doesn't hide
 // entries from curator.
 func TestNextUnprocessedEntryPerRoleIndependent(t *testing.T) {

@@ -92,6 +92,35 @@ func (s *Store) NextUnprocessedEntry(ctx context.Context, role, projectID string
 	return e, nil
 }
 
+// ClearProgress deletes librarian_progress rows for the given role and
+// entry ids, so those entries re-enter the role's backlog and get
+// re-processed. Used for maintenance re-runs — e.g. after the cataloger's
+// summary template changes, re-summarise the affected entries. Returns the
+// number of progress rows removed. Empty entryIDs is a no-op (returns 0);
+// it never clears the whole role's history by accident.
+func (s *Store) ClearProgress(ctx context.Context, role string, entryIDs []string) (int, error) {
+	if !ValidLibrarianRole(role) {
+		return 0, fmt.Errorf("%w: role %q", ErrInvalidInput, role)
+	}
+	if len(entryIDs) == 0 {
+		return 0, nil
+	}
+	ph := make([]string, len(entryIDs))
+	args := []any{role}
+	for i, id := range entryIDs {
+		ph[i] = "?"
+		args = append(args, id)
+	}
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM librarian_progress WHERE role = ? AND entry_id IN (`+strings.Join(ph, ",")+`)`,
+		args...)
+	if err != nil {
+		return 0, translateErr(err)
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
+}
+
 // RecordProgress writes a librarian_progress row marking that the
 // given role has processed (or explicitly chose not to act on) the
 // given entry.
