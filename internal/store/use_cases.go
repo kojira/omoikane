@@ -39,9 +39,14 @@ type UseCase struct {
 // of linked entries.
 type UseCaseSummary struct {
 	UseCase
-	EntryCount    int
-	ChildCount    int // direct children (parent_id = this.id)
-	SampleEntries []UseCaseSampleEntry
+	EntryCount int // entries linked DIRECTLY to this use_case
+	// DescendantEntryCount counts unique entries linked anywhere in this
+	// node's subtree (itself + all descendant leaves). For a leaf it equals
+	// EntryCount; for a META it rolls up the children, so the browse list
+	// never shows "0 entries" on a category that actually holds many.
+	DescendantEntryCount int
+	ChildCount           int // direct children (parent_id = this.id)
+	SampleEntries        []UseCaseSampleEntry
 }
 
 type UseCaseSampleEntry struct {
@@ -197,6 +202,34 @@ func (s *Store) UpsertUseCase(ctx context.Context, uc *UseCase) (*UseCase, error
 		return nil, translateErr(err)
 	}
 	return s.GetUseCase(ctx, uc.ID)
+}
+
+// DeleteUseCase removes a UseCase row. It refuses if the UseCase still has
+// directly-linked entries (unlink them first — silently dropping links would
+// lose categorisation no one asked to discard). Children, if any, are
+// re-parented to top-level by the `ON DELETE SET NULL` FK, so deleting a META
+// dissolves the grouping without destroying its leaves. Intended for pruning
+// empty/junk derived categories (e.g. smoke-test leftovers).
+func (s *Store) DeleteUseCase(ctx context.Context, useCaseID string) error {
+	if useCaseID == "" {
+		return fmt.Errorf("%w: use_case_id required", ErrInvalidInput)
+	}
+	var n int
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM use_case_entries WHERE use_case_id = ?`, useCaseID).Scan(&n); err != nil {
+		return translateErr(err)
+	}
+	if n > 0 {
+		return fmt.Errorf("%w: use_case has %d linked entries; unlink them before deleting", ErrInvalidInput, n)
+	}
+	res, err := s.db.ExecContext(ctx, `DELETE FROM use_cases WHERE id = ?`, useCaseID)
+	if err != nil {
+		return translateErr(err)
+	}
+	if aff, _ := res.RowsAffected(); aff == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // SetUseCaseParent rewrites a UseCase's parent. Pass empty parentID to
@@ -380,8 +413,31 @@ func (s *Store) ListUseCases(ctx context.Context, f UseCaseFilter, limit, offset
 		return nil, 0, err
 	}
 
-	// Sample entries — small per-row queries (4 each, 30 rows max).
+	// Rolled-up entry count + sample entries — small per-row queries
+	// (30 rows max, same pattern as elsewhere). The rollup walks the
+	// subtree so a META category reports the entries held by its leaves
+	// instead of its own (always-zero) direct count.
 	for _, sum := range out {
+		if sum.ChildCount == 0 {
+			// Leaf: rollup == direct count, skip the recursive query.
+			sum.DescendantEntryCount = sum.EntryCount
+		} else {
+			var rolled int
+			if rErr := s.db.QueryRowContext(ctx, `
+				WITH RECURSIVE subtree(id) AS (
+				    SELECT id FROM use_cases WHERE id = ?
+				    UNION ALL
+				    SELECT uc.id FROM use_cases uc JOIN subtree s ON uc.parent_id = s.id
+				)
+				SELECT COUNT(DISTINCT entry_id)
+				  FROM use_case_entries
+				 WHERE use_case_id IN (SELECT id FROM subtree)`, sum.ID).Scan(&rolled); rErr == nil {
+				sum.DescendantEntryCount = rolled
+			} else {
+				sum.DescendantEntryCount = sum.EntryCount
+			}
+		}
+
 		sRows, sErr := s.db.QueryContext(ctx, `
 			SELECT e.id, e.title, e.type, e.project_id
 			  FROM use_case_entries uce

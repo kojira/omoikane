@@ -292,3 +292,65 @@ func TestUseCaseTree(t *testing.T) {
 		t.Fatalf("self-parent: want ErrInvalidInput, got %v", err)
 	}
 }
+
+// TestUseCaseDescendantCount verifies a META reports rolled-up entry counts
+// (its leaves' entries) rather than its own always-zero direct count, and
+// that DeleteUseCase prunes an empty node while re-parenting its children.
+func TestUseCaseDescendantCount(t *testing.T) {
+	s, _ := seed(t)
+	ctx := context.Background()
+	const projID = "p" // seed() creates project "p"
+
+	// Two leaves under a meta, each with linked entries.
+	leaf1, _ := s.UpsertUseCase(ctx, &UseCase{NameJA: "葉1", NameEN: "Leaf One"})
+	leaf2, _ := s.UpsertUseCase(ctx, &UseCase{NameJA: "葉2", NameEN: "Leaf Two"})
+	meta, _ := s.UpsertUseCase(ctx, &UseCase{NameJA: "メタ", NameEN: "Meta Group"})
+	_ = s.SetUseCaseParent(ctx, leaf1.ID, meta.ID)
+	_ = s.SetUseCaseParent(ctx, leaf2.ID, meta.ID)
+
+	// 2 entries on leaf1, 1 on leaf2.
+	for i, leaf := range []*UseCase{leaf1, leaf1, leaf2} {
+		eid, err := s.CreateEntry(ctx, &Entry{
+			ProjectID: projID, Type: "trap", Title: "e", Body: "b", Status: "ACTIVE",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.LinkUseCaseEntry(ctx, leaf.ID, eid, "test"); err != nil {
+			t.Fatalf("link %d: %v", i, err)
+		}
+	}
+
+	// Meta is top-level; its DescendantEntryCount must be 3 (rolled up),
+	// while its direct EntryCount stays 0.
+	top, _, _ := s.ListUseCases(ctx, UseCaseFilter{Level: "top"}, 10, 0)
+	var m *UseCaseSummary
+	for _, r := range top {
+		if r.ID == meta.ID {
+			m = r
+		}
+	}
+	if m == nil {
+		t.Fatal("meta not found at top level")
+	}
+	if m.EntryCount != 0 {
+		t.Errorf("meta direct EntryCount: want 0, got %d", m.EntryCount)
+	}
+	if m.DescendantEntryCount != 3 {
+		t.Errorf("meta DescendantEntryCount: want 3 (rolled up), got %d", m.DescendantEntryCount)
+	}
+
+	// Delete refuses while a leaf has linked entries.
+	if err := s.DeleteUseCase(ctx, leaf1.ID); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("delete with linked entries: want ErrInvalidInput, got %v", err)
+	}
+
+	// An empty leaf deletes cleanly.
+	empty, _ := s.UpsertUseCase(ctx, &UseCase{NameJA: "空", NameEN: "Empty Leaf"})
+	if err := s.DeleteUseCase(ctx, empty.ID); err != nil {
+		t.Fatalf("delete empty leaf: %v", err)
+	}
+	if _, err := s.GetUseCase(ctx, empty.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("deleted leaf still present: %v", err)
+	}
+}

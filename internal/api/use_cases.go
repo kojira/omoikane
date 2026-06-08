@@ -53,9 +53,10 @@ func toUseCaseJSON(uc *store.UseCase) useCaseJSON {
 
 type useCaseSummaryJSON struct {
 	useCaseJSON
-	EntryCount    int                      `json:"entry_count"`
-	ChildCount    int                      `json:"child_count"`
-	SampleEntries []useCaseSampleEntryJSON `json:"sample_entries,omitempty"`
+	EntryCount           int                      `json:"entry_count"`
+	DescendantEntryCount int                      `json:"descendant_entry_count"`
+	ChildCount           int                      `json:"child_count"`
+	SampleEntries        []useCaseSampleEntryJSON `json:"sample_entries,omitempty"`
 }
 
 type useCaseSampleEntryJSON struct {
@@ -135,9 +136,10 @@ func (h *Handler) listUseCases(w http.ResponseWriter, r *http.Request) {
 	rows := make([]useCaseSummaryJSON, 0, len(out))
 	for _, s := range out {
 		row := useCaseSummaryJSON{
-			useCaseJSON: toUseCaseJSON(&s.UseCase),
-			EntryCount:  s.EntryCount,
-			ChildCount:  s.ChildCount,
+			useCaseJSON:          toUseCaseJSON(&s.UseCase),
+			EntryCount:           s.EntryCount,
+			DescendantEntryCount: s.DescendantEntryCount,
+			ChildCount:           s.ChildCount,
 		}
 		for _, e := range s.SampleEntries {
 			row.SampleEntries = append(row.SampleEntries, useCaseSampleEntryJSON{
@@ -188,9 +190,10 @@ func (h *Handler) getUseCase(w http.ResponseWriter, r *http.Request) {
 	children := make([]useCaseSummaryJSON, 0, len(childSums))
 	for _, c := range childSums {
 		children = append(children, useCaseSummaryJSON{
-			useCaseJSON: toUseCaseJSON(&c.UseCase),
-			EntryCount:  c.EntryCount,
-			ChildCount:  c.ChildCount,
+			useCaseJSON:          toUseCaseJSON(&c.UseCase),
+			EntryCount:           c.EntryCount,
+			DescendantEntryCount: c.DescendantEntryCount,
+			ChildCount:           c.ChildCount,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -250,6 +253,22 @@ func (h *Handler) unlinkUseCaseEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.Store.UnlinkUseCaseEntry(httpCtx(r), uc.ID, entryID); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// deleteUseCase prunes a UseCase row. Refuses (400) if it still has linked
+// entries. Children re-parent to top-level (FK ON DELETE SET NULL).
+func (h *Handler) deleteUseCase(w http.ResponseWriter, r *http.Request) {
+	ref := chi.URLParam(r, "ref")
+	uc, err := h.resolveUseCaseRef(httpCtx(r), ref)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	if err := h.Store.DeleteUseCase(httpCtx(r), uc.ID); err != nil {
 		writeStoreError(w, err)
 		return
 	}

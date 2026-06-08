@@ -12,7 +12,32 @@
   · <a href="/situations{{if .Token}}?token={{urlq .Token}}{{end}}">Situations</a>
   · <a href="/skill.md" title="onboarding instructions for AI agents">skill.md</a>
 </nav>
-<h1>Projects</h1>
+<h1>カテゴリ <span class="muted" style="font-size:0.55em;font-weight:normal">— omoikane がカバーしている問題類型(<a href="/lookup{{if .Token}}?token={{urlq .Token}}{{end}}">全部見る →</a>)</span></h1>
+{{if .UseCaseList}}
+<ul class="uc-list">
+  {{range .UseCaseList}}
+  <li class="uc-row">
+    <div class="uc-row-head">
+      {{if .Domain}}<span class="badge">{{.Domain}}</span>{{end}}
+      <a class="uc-name" href="{{navURL (print "/use_cases/" .Slug) $.Token $.Lang}}">
+        {{if eq $.Lang "en"}}{{.NameEN}}{{else}}{{.NameJA}}{{end}}
+      </a>
+      <span class="uc-altname muted">
+        {{if eq $.Lang "en"}}{{.NameJA}}{{else}}{{.NameEN}}{{end}}
+      </span>
+      {{if gt .ChildCount 0}}<span class="uc-count muted">📁 {{.ChildCount}} sub</span>{{end}}
+      <span class="uc-count muted">📄 {{.DescendantEntryCount}} entries</span>
+    </div>
+    {{$desc := .DescriptionJA}}{{if eq $.Lang "en"}}{{$desc = .DescriptionEN}}{{end}}
+    {{if $desc}}<div class="uc-desc">{{$desc}}</div>{{end}}
+  </li>
+  {{end}}
+</ul>
+{{else}}
+<div class="empty">カテゴリがまだありません(indexer が走るのを待ち中)。</div>
+{{end}}
+
+<h2>Projects</h2>
 {{if .Projects}}
 <table>
   <thead><tr><th>ID</th><th>Name</th><th>Description</th><th>Created</th></tr></thead>
@@ -40,31 +65,6 @@
   · <a href="/entries?type=decision{{if .Token}}&amp;token={{urlq .Token}}{{end}}">📋 Decisions</a>
   · <a href="/entries?status=DRAFT{{if .Token}}&amp;token={{urlq .Token}}{{end}}">📝 Drafts</a>
 </p>
-
-<h2>カテゴリ <span class="muted" style="font-size:0.7em;font-weight:normal">— omoikane がカバーしている問題類型(<a href="/lookup{{if .Token}}?token={{urlq .Token}}{{end}}">全部見る</a>)</span></h2>
-{{if .UseCaseList}}
-<ul class="uc-list">
-  {{range .UseCaseList}}
-  <li class="uc-row">
-    <div class="uc-row-head">
-      {{if .Domain}}<span class="badge">{{.Domain}}</span>{{end}}
-      <a class="uc-name" href="{{navURL (print "/use_cases/" .Slug) $.Token $.Lang}}">
-        {{if eq $.Lang "en"}}{{.NameEN}}{{else}}{{.NameJA}}{{end}}
-      </a>
-      <span class="uc-altname muted">
-        {{if eq $.Lang "en"}}{{.NameJA}}{{else}}{{.NameEN}}{{end}}
-      </span>
-      {{if gt .ChildCount 0}}<span class="uc-count muted">📁 {{.ChildCount}} children</span>{{end}}
-      <span class="uc-count muted">📄 {{.EntryCount}} entries</span>
-    </div>
-    {{$desc := .DescriptionJA}}{{if eq $.Lang "en"}}{{$desc = .DescriptionEN}}{{end}}
-    {{if $desc}}<div class="uc-desc">{{$desc}}</div>{{end}}
-  </li>
-  {{end}}
-</ul>
-{{else}}
-<div class="empty">カテゴリがまだありません(indexer が走るのを待ち中)。</div>
-{{end}}
 
 <h2>Recent entries</h2>
 {{if .Entries}}

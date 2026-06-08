@@ -32,8 +32,8 @@
         <span class="uc-altname muted">
           {{if eq $.Lang "en"}}{{.NameJA}}{{else}}{{.NameEN}}{{end}}
         </span>
-        {{if gt .ChildCount 0}}<span class="uc-count muted">📁 {{.ChildCount}} children</span>{{end}}
-        <span class="uc-count muted">📄 {{.EntryCount}} entries</span>
+        {{if gt .ChildCount 0}}<span class="uc-count muted">📁 {{.ChildCount}} sub</span>{{end}}
+        <span class="uc-count muted">📄 {{.DescendantEntryCount}} entries</span>
       </div>
       {{$desc := .DescriptionJA}}{{if eq $.Lang "en"}}{{$desc = .DescriptionEN}}{{end}}
       {{if $desc}}<div class="uc-desc">{{$desc}}</div>{{end}}
