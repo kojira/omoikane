@@ -41,6 +41,15 @@ echo "top-level count: $TOP_COUNT"
 - If `TOP_COUNT > 20`: **switch to Tidy mode** (see section below). Do
   that work INSTEAD of steps 1–3 this session. The new-entry backlog
   can wait one tick; an overgrown top level is the bigger UX hit.
+- **Even under 20, switch to Tidy mode if the top reads as NICHE rather
+  than BROAD.** Count is not the only trigger. Read the top-level names:
+  if a newcomer would see specific problem-kinds ("Realtime voice
+  dialogue", "Go nil-slice equality") rather than broad domains a
+  product has ("Voice & dialogue product", "Infrastructure & ops"), the
+  top is too granular — stack a broader META level above. The test:
+  **would someone who just arrived recognise these as the top few areas
+  this knowledge base is about?** If they read as leaf-level specifics,
+  they belong one level down, under a broad domain.
 - Otherwise: proceed to step 1.
 
 ### 1. Pick targets (signal-driven)
