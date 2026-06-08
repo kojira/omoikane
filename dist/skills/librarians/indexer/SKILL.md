@@ -41,6 +41,7 @@ whitelist:
     - POST /v1/librarian/progress
     - POST /v1/use_cases
     - POST /v1/use_cases/{ref}/entries
+    - DELETE /v1/use_cases/{ref}   # prune empty junk leaves in tidy mode
     - POST /v1/entries/{id}/index   # legacy, kept during transition
 
 prohibitions:
@@ -261,6 +262,39 @@ Same rules as leaves (3–8 words, ≤ 50 chars per side, bilingual). But
   "Agent runtime / harness".
 - Avoid catch-all names like "Misc" or "General" — better to leave a
   leaf at the top level than to dump it under a fake parent.
+
+### Quality pass — before you finish tidy mode
+
+Three failure modes were seen in the first real tidy. Check for each:
+
+1. **One problem space per META — don't merge unrelated spaces.** A
+   conjunction is fine when it names two facets of ONE space ("Voice and
+   dialogue foundation", "Cloud and infrastructure"). It's a smell when
+   it bolts together spaces that aren't really the same kind of problem —
+   e.g. "Web authentication & UX failures" merges auth (a security
+   concern) with UX (a presentation concern) because neither alone had
+   enough leaves. Split those, or leave the smaller group's leaves at top
+   level. Test: would someone looking for one half ever expect to find
+   the other half here? If no, they don't belong in one META.
+
+2. **Don't force-fit a leaf that has no clean home.** If a leaf doesn't
+   genuinely belong under any META (e.g. a Go-language gotcha has nothing
+   to do with "Data storage"), **leave it at top level**. A misplaced
+   leaf is worse than an un-parented one — it lies about what the
+   category contains. Top-level standalone leaves are fine; the tree
+   doesn't have to be all-META.
+
+3. **Prune empty junk leaves.** A leaf with `entry_count=0` and a generic
+   name (smoke-test leftovers like "Test usage", "Sample") is clutter.
+   Delete it:
+   ```bash
+   curl -fsS -X DELETE -H "Authorization: Bearer $KB_TOKEN" \
+     "$KB_URL/v1/use_cases/<id-or-slug>"
+   # 204 on success; 400 if it still has linked entries (won't delete those)
+   ```
+   Only delete leaves that are genuinely junk (0 entries AND a
+   meaningless name). A real category that just happens to be empty today
+   stays.
 
 ## Transitional note
 
