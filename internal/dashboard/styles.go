@@ -210,6 +210,16 @@ footer { padding: 1rem; text-align: center; color: var(--muted); font-size: 0.85
 .uc-entry-summary-body ul, .uc-entry-summary-body ol { margin: 0.3rem 0 0.3rem 1.2rem; }
 .uc-entry-summary-body code { font-size: 0.85em; }
 
+/* Project domain primer — collapsible overview on the entry page so a
+   reader without the project's domain knowledge can decode its terms. */
+.project-primer { margin: 0.6rem 0 1.2rem; border: 1px solid var(--border); border-radius: 6px;
+                  background: var(--surface); padding: 0.4rem 0.8rem; }
+.project-primer summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }
+.project-primer summary:hover { color: var(--accent-strong); }
+.project-primer-body { margin-top: 0.6rem; max-width: 80ch; }
+.project-primer-body h1, .project-primer-body h2 { font-size: 1.0rem; margin: 0.6rem 0 0.2rem; }
+.project-primer-desc { margin: 0.4rem 0 1rem; font-size: 0.9rem; }
+
 /* Language toggle in the header */
 .lang-toggle { font-size: 0.85rem; }
 .pager-info { font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); }

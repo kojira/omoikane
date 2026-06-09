@@ -70,8 +70,12 @@ type Project struct {
 	ID          string    `json:"id"`
 	Name        string    `json:"name"`
 	Description string    `json:"description,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
-	Metadata    string    `json:"metadata,omitempty"`
+	// Overview is a longer markdown domain primer + glossary, distinct from
+	// the one-line Description. It lets a reader from another project decode
+	// this project's domain-specific entries.
+	Overview  string    `json:"overview,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	Metadata  string    `json:"metadata,omitempty"`
 }
 
 // Entry mirrors the entries row plus joined tags.

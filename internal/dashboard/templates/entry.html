@@ -25,6 +25,15 @@
 </p>
 <h1>{{.Title}}</h1>
 
+{{with $.Project}}{{if .Overview}}
+<details class="project-primer">
+  <summary>📌 プロジェクト「{{.Name}}」とは — ドメイン入門(クリックで展開)</summary>
+  <div class="project-primer-body md">{{renderContent .Overview $.Token}}</div>
+</details>
+{{else if .Description}}
+<p class="project-primer-desc muted">📌 {{.Name}}: {{.Description}}</p>
+{{end}}{{end}}
+
 {{if .Tags}}
 <div class="field">
   <div class="label">Tags</div>

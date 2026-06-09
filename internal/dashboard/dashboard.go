@@ -632,6 +632,13 @@ func (h *Handler) entry(w http.ResponseWriter, r *http.Request) {
 	}
 	pc.Title = "omoikane — " + e.Title
 	pc.Entry = e
+	// Project overview — the domain primer that lets a reader without this
+	// project's domain knowledge decode its entries. Best-effort.
+	if e.ProjectID != "" {
+		if proj, pErr := h.Store.GetProject(r.Context(), e.ProjectID); pErr == nil {
+			pc.Project = proj
+		}
+	}
 	// Best-effort enrichment for Phase 3 panels — failures degrade silently.
 	if sig, sErr := h.Store.EntrySignal(r.Context(), id); sErr == nil {
 		pc.Signals = sig

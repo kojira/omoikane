@@ -15,6 +15,7 @@ type projectCreateReq struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
+	Overview    string `json:"overview,omitempty"`
 	Metadata    any    `json:"metadata,omitempty"`
 }
 
@@ -36,6 +37,7 @@ func (h *Handler) createProject(w http.ResponseWriter, r *http.Request) {
 		ID:          req.ID,
 		Name:        req.Name,
 		Description: req.Description,
+		Overview:    req.Overview,
 		Metadata:    metaJSON,
 	}
 	if err := h.Store.CreateProject(httpCtx(r), &p); err != nil {
@@ -63,6 +65,30 @@ func (h *Handler) listProjects(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) getProject(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	p, err := h.Store.GetProject(httpCtx(r), id)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, p)
+}
+
+type projectPatchReq struct {
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
+	Overview    *string `json:"overview,omitempty"`
+}
+
+// patchProject updates mutable project fields (name / description /
+// overview). Only fields present in the body are changed. Used mainly to
+// set/replace a project's domain overview after creation.
+func (h *Handler) patchProject(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var req projectPatchReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, CodeBadJSON, err.Error(), nil)
+		return
+	}
+	p, err := h.Store.UpdateProject(httpCtx(r), id, req.Name, req.Description, req.Overview)
 	if err != nil {
 		writeStoreError(w, err)
 		return

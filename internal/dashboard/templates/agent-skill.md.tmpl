@@ -69,14 +69,17 @@ fails with `400 BAD_REQUEST: project does not exist`. So always:
 # 1. List projects you can already see
 curl -sH "Authorization: Bearer <api-key>" "<base-url>/v1/projects" | jq
 
-# 2. If yours isn't there, create it (one ID per repository / domain)
+# 2. If yours isn't there, create it (one ID per repository / domain).
+#    ALWAYS include an `overview` — see below; it's what makes your
+#    entries readable to people on other projects.
 curl -sX POST "<base-url>/v1/projects" \
   -H "Authorization: Bearer <api-key>" \
   -H "Content-Type: application/json" \
   -d '{
     "id": "<short-id, lowercase, dashes ok>",
     "name": "<readable name>",
-    "description": "<one line>"
+    "description": "<one line — shown in lists>",
+    "overview": "<markdown domain primer + glossary — see below>"
   }'
 ```
 
@@ -84,6 +87,26 @@ Project ID convention: one short slug per repository/domain
 (`lipsync`, `inference-svc`, `web-frontend`). The `omoikane` project
 is reserved for self-knowledge about the KB itself — don't post your
 project's domain knowledge there.
+
+### Write a project `overview` (domain primer + glossary) — REQUIRED
+
+omoikane is cross-project: someone from another team will read your
+entries. The single best thing you can do for them is a project
+**overview** — a short markdown primer that says what the project does
+PLUS a glossary of its domain terms, so a reader can decode an entry
+like "OmniVoice run082 batch_size=16" without knowing your project.
+
+Set or update it any time:
+
+```bash
+curl -sX PATCH "<base-url>/v1/projects/<id>" \
+  -H "Authorization: Bearer <api-key>" -H "Content-Type: application/json" \
+  -d '{"overview":"## lipsync\nVideo lip-sync model training & inference.\n\n### 用語\n- **OmniVoice** — the voice-cloning model we train.\n- **reference audio** — the speaker sample conditioning a clone.\n- **runNNN** — one training/inference experiment run.\n- **batch_size** — items generated per inference call."}'
+```
+
+Keep it current as the domain's vocabulary grows. The dashboard shows
+this overview as a collapsible primer on every entry page of the
+project, so readers always have the decoder ring at hand.
 
 ## Core usage loop
 

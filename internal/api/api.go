@@ -102,6 +102,7 @@ func (h *Handler) Mount(r chi.Router) {
 			r.With(auth.RequireScope("read")).Get("/projects", h.listProjects)
 			r.With(auth.RequireScope("read")).Get("/projects/{id}", h.getProject)
 			r.With(auth.RequireScope("write")).Post("/projects", h.createProject)
+			r.With(auth.RequireScope("write")).Patch("/projects/{id}", h.patchProject)
 
 			r.With(auth.RequireScope("read")).Get("/entries", h.listEntries)
 			r.With(auth.RequireScope("read")).Get("/entries/{id}", h.getEntry)

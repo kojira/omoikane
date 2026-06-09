@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"strings"
 	"time"
 )
 
@@ -13,8 +14,8 @@ func (s *Store) CreateProject(ctx context.Context, p *Project) error {
 	}
 	now := time.Now().UTC()
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO projects(id, name, description, metadata, created_at) VALUES (?, ?, ?, ?, ?)`,
-		p.ID, p.Name, nullable(p.Description), nullable(p.Metadata), now)
+		`INSERT INTO projects(id, name, description, overview, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		p.ID, p.Name, nullable(p.Description), nullable(p.Overview), nullable(p.Metadata), now)
 	if err != nil {
 		return translateErr(err)
 	}
@@ -22,12 +23,45 @@ func (s *Store) CreateProject(ctx context.Context, p *Project) error {
 	return nil
 }
 
+// UpdateProject patches mutable fields of an existing project. Only non-nil
+// pointers are applied, so a caller can set just the overview without
+// touching name/description. Returns the updated project.
+func (s *Store) UpdateProject(ctx context.Context, id string, name, description, overview *string) (*Project, error) {
+	sets := []string{}
+	args := []any{}
+	if name != nil {
+		sets = append(sets, "name = ?")
+		args = append(args, *name)
+	}
+	if description != nil {
+		sets = append(sets, "description = ?")
+		args = append(args, nullable(*description))
+	}
+	if overview != nil {
+		sets = append(sets, "overview = ?")
+		args = append(args, nullable(*overview))
+	}
+	if len(sets) == 0 {
+		return s.GetProject(ctx, id)
+	}
+	args = append(args, id)
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE projects SET `+strings.Join(sets, ", ")+` WHERE id = ?`, args...)
+	if err != nil {
+		return nil, translateErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return nil, ErrNotFound
+	}
+	return s.GetProject(ctx, id)
+}
+
 func (s *Store) GetProject(ctx context.Context, id string) (*Project, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, name, COALESCE(description,''), created_at, COALESCE(metadata,'')
+		`SELECT id, name, COALESCE(description,''), COALESCE(overview,''), created_at, COALESCE(metadata,'')
 		 FROM projects WHERE id = ?`, id)
 	var p Project
-	if err := row.Scan(&p.ID, &p.Name, &p.Description, &p.CreatedAt, &p.Metadata); err != nil {
+	if err := row.Scan(&p.ID, &p.Name, &p.Description, &p.Overview, &p.CreatedAt, &p.Metadata); err != nil {
 		return nil, translateErr(err)
 	}
 	return &p, nil
@@ -35,13 +69,13 @@ func (s *Store) GetProject(ctx context.Context, id string) (*Project, error) {
 
 func (s *Store) ListProjects(ctx context.Context) ([]*Project, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, COALESCE(description,''), created_at, COALESCE(metadata,'')
+		`SELECT id, name, COALESCE(description,''), COALESCE(overview,''), created_at, COALESCE(metadata,'')
 		 FROM projects ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
 	values, err := mapRows[Project](rows, func(c rowScanner, p *Project) error {
-		return c.Scan(&p.ID, &p.Name, &p.Description, &p.CreatedAt, &p.Metadata)
+		return c.Scan(&p.ID, &p.Name, &p.Description, &p.Overview, &p.CreatedAt, &p.Metadata)
 	})
 	if err != nil {
 		return nil, err
