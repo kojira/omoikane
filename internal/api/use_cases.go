@@ -196,15 +196,39 @@ func (h *Handler) getUseCase(w http.ResponseWriter, r *http.Request) {
 			ChildCount:           c.ChildCount,
 		})
 	}
+	// Cross-entry synthesis (the synthesizer's distilled common insight),
+	// if one exists. Body carried so callers can show it without a 2nd call.
+	var synthesis any
+	if syn, sErr := h.Store.UseCaseSynthesis(httpCtx(r), uc.ID); sErr == nil && syn != nil {
+		synthesis = map[string]any{"id": syn.ID, "body": syn.Body, "updated_at": syn.UpdatedAt}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"use_case":      toUseCaseJSON(uc),
 		"parent":        parent,
 		"children":      children,
+		"synthesis":     synthesis,
 		"entries":       entries,
 		"entries_total": total,
 		"limit":         limit,
 		"offset":        offset,
 	})
+}
+
+// useCaseSynthesis returns the latest cross-entry synthesis for a UseCase
+// (or 404 if none yet). Mirror of /entries/{id}/summary.
+func (h *Handler) useCaseSynthesis(w http.ResponseWriter, r *http.Request) {
+	ref := chi.URLParam(r, "ref")
+	uc, err := h.resolveUseCaseRef(httpCtx(r), ref)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	syn, err := h.Store.UseCaseSynthesis(httpCtx(r), uc.ID)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, syn)
 }
 
 // linkUseCaseEntry attaches an entry to a UseCase.

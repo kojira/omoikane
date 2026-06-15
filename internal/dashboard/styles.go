@@ -210,6 +210,15 @@ footer { padding: 1rem; text-align: center; color: var(--muted); font-size: 0.85
 .uc-entry-summary-body ul, .uc-entry-summary-body ol { margin: 0.3rem 0 0.3rem 1.2rem; }
 .uc-entry-summary-body code { font-size: 0.85em; }
 
+/* Cross-entry synthesis panel on the category page — the distilled common
+   insight, the payoff of grouping many entries under one problem-kind. */
+.uc-synthesis { margin: 1rem 0 1.5rem; padding: 0.8rem 1.1rem; border-left: 3px solid var(--accent-strong);
+                background: var(--surface); border-radius: 0 6px 6px 0; }
+.uc-synthesis-head { font-size: 1.05rem; margin: 0 0 0.4rem; }
+.uc-synthesis-head .muted { font-size: 0.7em; font-weight: normal; }
+.uc-synthesis-body { max-width: 80ch; }
+.uc-synthesis-body h2, .uc-synthesis-body h3 { font-size: 0.95rem; margin: 0.6rem 0 0.2rem; }
+
 /* Project domain primer — collapsible overview on the entry page so a
    reader without the project's domain knowledge can decode its terms. */
 .project-primer { margin: 0.6rem 0 1.2rem; border: 1px solid var(--border); border-radius: 6px;

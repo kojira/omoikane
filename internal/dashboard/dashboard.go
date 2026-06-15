@@ -283,6 +283,7 @@ type pageCtx struct {
 	UseCaseParent *store.UseCase         // for breadcrumb on detail page
 	UseCaseChildren []*store.UseCaseSummary // for tree drilldown on detail page
 	EntrySummaries  map[string]*store.Entry // entry_id → cataloger summary (if any)
+	UseCaseSynthesis *store.Entry          // cross-entry common insight (if any)
 
 	// Phase 5 — chat
 	ChatThreads      []*store.ChatThread
@@ -893,6 +894,10 @@ func (h *Handler) useCasePage(w http.ResponseWriter, r *http.Request) {
 	pc.Entries = entries
 	pc.Pagination = buildPagination(r, total, page, pageSize)
 
+	// Cross-entry synthesis (the common insight across this category).
+	if syn, synErr := h.Store.UseCaseSynthesis(r.Context(), uc.ID); synErr == nil {
+		pc.UseCaseSynthesis = syn
+	}
 	// Tree context: breadcrumb parent + drilldown children.
 	if uc.ParentID != "" {
 		if p, pErr := h.Store.GetUseCase(r.Context(), uc.ParentID); pErr == nil {

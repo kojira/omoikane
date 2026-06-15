@@ -232,6 +232,27 @@ func (s *Store) DeleteUseCase(ctx context.Context, useCaseID string) error {
 	return nil
 }
 
+// UseCaseSynthesis returns the latest cross-entry synthesis for a UseCase —
+// a librarian_meta the synthesizer writes that distils the COMMON insight
+// across the category's member entries (project-agnostic). Mirrors
+// EntrySummary; ErrNotFound when none exists yet. DRAFT is accepted (Phase
+// 5 observation), only terminal statuses are excluded.
+func (s *Store) UseCaseSynthesis(ctx context.Context, useCaseID string) (*Entry, error) {
+	var id string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id FROM entries
+		 WHERE type = 'librarian_meta'
+		   AND status NOT IN ('SUPERSEDED','ARCHIVED','DUPLICATE')
+		   AND json_extract(metadata, '$.kind') = 'use_case_synthesis'
+		   AND json_extract(metadata, '$.use_case_id') = ?
+		 ORDER BY created_at DESC
+		 LIMIT 1`, useCaseID).Scan(&id)
+	if err != nil {
+		return nil, translateErr(err)
+	}
+	return s.GetEntry(ctx, id)
+}
+
 // SetUseCaseParent rewrites a UseCase's parent. Pass empty parentID to
 // promote it back to top-level. The indexer's "tidy" mode calls this in
 // batches when it stacks meta categories above existing leaves.

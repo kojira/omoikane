@@ -72,7 +72,8 @@ type LibrarianInstance struct {
 func ValidLibrarianRole(r string) bool {
 	switch r {
 	case "coordinator", "cataloger", "curator", "detective",
-		"conservator", "scout", "indexer", "summarizer", "judge":
+		"conservator", "scout", "indexer", "summarizer", "judge",
+		"synthesizer":
 		return true
 	}
 	return false
@@ -85,6 +86,7 @@ func LibrarianRoleSlice() []string {
 	return []string{
 		"cataloger", "conservator", "coordinator", "curator",
 		"detective", "indexer", "judge", "scout", "summarizer",
+		"synthesizer",
 	}
 }
 
@@ -100,6 +102,7 @@ var ValidLibrarianRoles = map[string]bool{
 	"indexer":     true,
 	"summarizer":  true,
 	"judge":       true,
+	"synthesizer": true,
 }
 
 // ValidChatAuthor is the broader set of accepted `author_role` values

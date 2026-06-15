@@ -22,6 +22,13 @@
 {{if $desc}}<p class="uc-detail-desc reading">{{$desc}}</p>{{end}}
 {{end}}
 
+{{with .UseCaseSynthesis}}
+<section class="uc-synthesis reading">
+  <h2 class="uc-synthesis-head">🧩 共通知見 <span class="muted">— このカテゴリのエントリ群から抽出した、プロジェクト非依存の要点</span></h2>
+  <div class="uc-synthesis-body md">{{renderContent .Body $.Token}}</div>
+</section>
+{{end}}
+
 {{if .UseCaseChildren}}
 <h2>サブカテゴリ</h2>
 <ul class="uc-list">
