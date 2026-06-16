@@ -11,6 +11,38 @@
 
 ---
 
+## v0.18(2026-06-16)
+
+### 背景
+
+omoikane の核心目的は「数多の投稿から共通点を抜き出し、各プロジェクトの詳細を知らなくても活用できる知見にする」こと。運用を測ると2つのギャップが判明: (a) ドメイン固有エントリ(`OmniVoice run082 …`)が他プロジェクトの読み手に解読不能、(b) UseCase は「ラベル + リスト」で、クラスタの共通知見を生成する役割が誰にも無かった(横断統合の不在)。さらに、要約・エントリが参照ポインタだらけで自己完結していない、日次ログ等の「記録」が問題カテゴリに混入して幻カテゴリを量産する、という品質問題も同時に観測された。
+
+### 変更点
+
+- §23.15.6(新設): 知見化を5層パイプライン(A 投稿者の抽象化 / A' プロジェクト概要 / B 個別要約 / C グルーピング / D 横断統合)として明示し担い手を割当。
+- **synthesizer(10人目の司書)**: 成熟 UseCase(`descendant_entry_count ≥ 3`)のメンバーを読み、プロジェクト非依存の共通原理を1つ合成。`librarian_meta` kind=`use_case_synthesis` + `metadata.use_case_id`(cataloger_summary と同型、スキーマ変更ゼロ)。緩いバケツは no_action、羅列禁止。`ValidLibrarianRole` に登録。
+- **`projects.overview`**(migration 021): 一行 description と別の markdown ドメイン入門+用語集。`POST /v1/projects` 受理 + `PATCH /v1/projects/{id}`。エントリページに折りたたみ primer、プロジェクトページに全文。
+- **API**: `GET /v1/use_cases/{ref}/synthesis`(+ getUseCase 同梱)、`GET /v1/entries/{id}/summary` と対をなす。`EntryFilter.NotProgressedByRole` + `?not_progressed_by=indexer`、`?uncategorized=true`、`?order=oldest`。`POST /v1/librarian/backlog/reprocess`(テンプレ変更後の再処理)、`POST /v1/use_cases/{ref}/parent`(re-parent/un-root)、`DELETE /v1/use_cases/{ref}`。
+- **indexer の「記録 vs 知見」判定**: 点の記録(日次ログ・スモーク・run スナップショット・完了ノート・お知らせ)はカテゴリに紐付けず skip-with-progress。多トピック記録による幻カテゴリ量産を防止。
+- **cataloger 要約 + skill.md 投稿ガイド**: 自己完結(本文ポインタ禁止・参照は末尾 `## Related`)、転用可能原理を先頭・固有名は "seen in …"。skill.md 0.8.0→0.10.0。
+- **ダッシュボード**: カテゴリトップを大→中→小の3段ツリーに、合算 entry 数表示、カテゴリ先頭に「🧩 共通知見」パネル、エントリページにプロジェクト primer、ホームにカテゴリ一覧。
+- **API 上限の silent truncation 修正**(`limit > 上限` を default に戻さず上限にクランプ)。
+
+### 設計判断の根拠
+
+- **抽象化は投稿者が担う**: ドメイン知識を持つのは投稿者だけ。後段の司書は LLM を持たず(cataloger は知らないドメインを no_action)、知らないドメインを汎用化できない。だから A/A' を skill.md で必須化し、できる人にやらせる。
+- **synthesizer を別役割に**: 個別要約(cataloger)・グルーピング(indexer)・ペアリンク(detective)とは認知タスクが違う(N件を読んで1つに抽象)。混ぜると過負荷。独立役割が境界として正しい。
+- **記録を分類しない**: UseCase は「再利用可能な問題類型」。点の記録は時系列(Journal)で辿るもので、問題類型に混ぜると幻カテゴリ(中身が日次ログ1行だけ)を生む。判定は「3ヶ月後の再利用可能な答えか、ある瞬間の記録か」。
+- **storage は librarian_meta + kind を再利用**: synthesis/overview とも既存パターンに乗せ、スキーマ変更を最小化(overview のみ projects に1列)。
+
+### 影響範囲
+
+- DB: migration 021(projects.overview)を未適用環境は起動時自動適用。既存行は NULL で安全。
+- 司書: 9 → **10 役割**(synthesizer 追加)。本番は launchd で 8 プロセス稼働(cataloger/curator/detective/scout/indexer/summarizer/synthesizer + off-roster chronicler)。
+- API: 追加エンドポイント中心、既存契約は維持。
+
+---
+
 ## v0.17(2026-06-06)
 
 ### 背景

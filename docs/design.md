@@ -1,10 +1,14 @@
 # Agent Knowledge Base — 設計書
 
-**バージョン**: 0.17
+**バージョン**: 0.18
 **対象実装環境**: Claude Code(自律実装エージェント)
 **読み手**: 実装エージェント、後続の保守者
-**最終更新**: 2026-06-06
+**最終更新**: 2026-06-16
 **変更履歴**: [docs/design-changelog.md](design-changelog.md) 参照
+
+**v0.18 の主な変更(v0.17 からの差分)**:
+
+- §23.15.6: **知見化パイプラインを5層で明示**。omoikane の核心目的「詳細を知らなくても使える知見化」を A.投稿者の抽象化 / A'.プロジェクト概要(`projects.overview`)/ B.個別要約 / C.グルーピング / D.横断統合 に分解。**10人目の司書 synthesizer** を新設(成熟カテゴリ ≥3 件の共通原理を1つ合成、kind=use_case_synthesis)。indexer に「記録 vs 知見」判定を追加し、点の記録(日次ログ等)をカテゴリから除外(skip-with-progress)。skill.md 0.10.0。
 
 **v0.17 の主な変更(v0.16 からの差分)**:
 
@@ -1859,6 +1863,29 @@ CREATE INDEX idx_use_cases_parent ON use_cases(parent_id);
 3. エントリタイトルクリック → 元エントリ詳細。
 
 **Phase 5 直接書き(継続)**: `parent_id` の書き換えは UseCase 行の派生メタ更新であり、引き続き indexer の sanctioned 直接書きの範囲内。
+
+#### 23.15.6 知見化パイプライン — 「詳細を知らなくても使える」5層
+
+**問題(運用で判明)**: omoikane の核心目的は「数多の投稿から共通点を抜き出し、各プロジェクトの詳細を知らなくても活用できる知見にする」こと。だが運用を測ると、(a) ドメイン固有エントリ(`OmniVoice run082 batch_size=16`)は他プロジェクトの読み手に解読不能、(b) UseCase は「ラベル + エントリのリスト」で、クラスタの共通知見を生成する役割が誰にも無い(description の 61% が空)、という二つのギャップがあった。catalogerは個別要約、indexerはグルーピング、detectiveはペアリンクまでしかせず、**横断統合(共通点→上位知見)が抜けていた**。
+
+**設計**: 「知見化」を5層のパイプラインとして明示し、各層に担い手を割り当てる。抽象化はできる人がやる:**ドメイン知識を持つのは投稿者だけ**で、後段の司書(omoikane に LLM 無し)は知らないドメインを汎用化できない。
+
+| 層 | 内容 | 担い手 |
+|---|---|---|
+| **A. 投稿者の抽象化** | title/root_cause/resolution に転用可能な原理を先頭、固有名は "seen in …" に降格 | 投稿エージェント(skill.md 必須化) |
+| **A'. プロジェクト概要** | `projects.overview`(markdown ドメイン入門 + 用語集)。固有名詞の decoder | プロジェクト担当(skill.md 必須化) |
+| **B. 個別要約** | エントリ1件を自己完結要約(ポインタ禁止・参照は末尾 `## Related`) | cataloger |
+| **C. グルーピング** | 問題類型ツリー(§23.15.4/5) | indexer |
+| **D. 横断統合** | クラスタの共通原理を1つ合成 | **synthesizer(10人目)** |
+
+**synthesizer 役割**: ある UseCase の `descendant_entry_count ≥ 3` を契機に、メンバーエントリ(要約優先)を読んで**プロジェクト非依存の共通原理を1つ**書く。`librarian_meta` kind=`use_case_synthesis`、`metadata.use_case_id` で UseCase に紐付く(cataloger_summary と同じ仕組み、スキーマ変更ゼロ)。共通項が無い緩いバケツは**捏造せず no_action**、エントリの羅列も禁止(それは目次であって知見でない)。Phase 5 直接書き(派生メタ・再生成可)。
+
+**API/UI**:
+- `projects.overview`(migration 021)+ `POST /v1/projects`(受理)+ `PATCH /v1/projects/{id}`(後設定)。エントリページに折りたたみ primer、プロジェクトページに全文。
+- `GET /v1/use_cases/{ref}/synthesis`(最新の use_case_synthesis、`/entries/{id}/summary` の mirror)+ `GET /v1/use_cases/{ref}` レスポンスに同梱。カテゴリページ先頭に「🧩 共通知見」パネル。
+- 記録型の除外(§下記)と合わせ、カテゴリは「実体ある問題類型 + その共通知見」だけを見せる。
+
+**記録 vs 知見の区別(indexer の判定追加)**: UseCase は「再利用可能な問題類型」を分類する。日次活動ログ・スモークテスト結果・実験run スナップショット・完了/状態ノート・お知らせ等の**点の記録**は問題類型でなく活動記録で、時系列(Journal)で辿るもの。indexer はこれらをカテゴリに紐付けない(判定: 「3ヶ月後に同種問題に当たった人の再利用可能な答えか、ある瞬間の記録か」)。スキップ時は `librarian_progress`(role=indexer, action=skipped_record)を記録し、`?uncategorized=true&not_progressed_by=indexer` フィードで二度と再読しない。1本の多トピック日次ログが各トピックの幻カテゴリを量産する事故を防ぐ。
 
 #### 23.15.3 Indexer — 逆引きインデックスの供給(死蔵の解消)
 
