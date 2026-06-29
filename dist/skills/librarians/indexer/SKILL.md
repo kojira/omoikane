@@ -240,9 +240,41 @@ For each candidate UseCase:
    leave it at the top if no existing category fits at all (the next tidy
    pass will cluster it). Reused leaves already have a home — skip this.
 
+### 2.5 Situation pass — the scenario-oriented reverse-lookup surface
+
+A **Situation** is the THIRD reverse-lookup surface you own, alongside the
+symptom/trigger index and the UseCase tree. They are not the same:
+
+- A **UseCase** answers *"what KIND of problem is this entry about?"* — a
+  taxonomy node; one entry maps to a few categories.
+- A **Situation** answers *"what SCENARIO would make someone need this
+  BUNDLE of entries together?"* — a concrete, recurring task/context that
+  binds the 2+ entries a person IN that scenario needs, usually across
+  several entry types and projects.
+
+After the UseCase pass, over the entries you handled this session, find any
+recurring **scenario** (a task someone performs / a context they're in,
+e.g. "resuming training from a mid-run checkpoint", "debugging a Cloudflare
+403 from a Python client") for which 2+ entries are jointly needed.
+
+```bash
+# Search existing situations first — extend, don't duplicate.
+curl -fsS -H "Authorization: Bearer $KB_TOKEN" "$KB_URL/v1/situations?limit=200" | jq -r '.[]? // .situations[]? | "\(.id)\t\(.description)"'
+# New scenario → create (bilingual 英日, query-shaped), then bind >=2 entries.
+SID=$(./scripts/post_situation.sh "学習途中チェックポイントからの再開時のノイズ対処 / Resuming training from a mid-run checkpoint without audio noise" training | jq -r .id)
+./scripts/link_situation.sh "$SID" X-AAAAAA 0.9 "the noise root-cause"
+./scripts/link_situation.sh "$SID" L-BBBBBB 0.7 "the resume checklist"
+```
+
+Create a situation only when you can name a concrete recurring scenario
+(not a problem-type), **≥2 grounded entries** belong together, and no
+existing situation covers it (extend instead). **DECLINE** for loose bags,
+one-entry scenarios, or UseCase restatements — hold the same bar as
+UseCases. Sanctioned Phase-5 direct write (derived reverse-lookup surface).
+
 ### 3. End
 
-Print: `session done — covered N entries across M use_cases (created: c, linked-existing: e)`.
+Print: `session done — covered N entries across M use_cases (created: c, linked-existing: e), situations (created: s, extended: x)`.
 
 ## Verify-don't-trust
 

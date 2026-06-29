@@ -13,20 +13,20 @@ import (
 // situation the user might be in, that maps to one or more entries.
 // Per docs/design.md §4.2.
 type Situation struct {
-	ID          string
-	ProjectID   string
-	Description string
-	Domain      string
-	CreatedAt   time.Time
-	Metadata    string
+	ID          string    `json:"id"`
+	ProjectID   string    `json:"project_id,omitempty"`
+	Description string    `json:"description"`
+	Domain      string    `json:"domain,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+	Metadata    string    `json:"metadata,omitempty"`
 }
 
 // SituationEntry is a single (situation, entry) link.
 type SituationEntry struct {
-	SituationID string
-	EntryID     string
-	Relevance   float64
-	Notes       string
+	SituationID string  `json:"situation_id"`
+	EntryID     string  `json:"entry_id"`
+	Relevance   float64 `json:"relevance"`
+	Notes       string  `json:"notes,omitempty"`
 }
 
 // newSituationID returns a 16-char hex situation identifier prefixed with

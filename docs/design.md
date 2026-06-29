@@ -1903,6 +1903,8 @@ CREATE INDEX idx_use_cases_parent ON use_cases(parent_id);
 
 **Cataloger との境界**: Cataloger は per-entry の要約(librarian_meta)とタグ/階層/situation の**提案**を担い、retrieval 句は要約本文に書く。Indexer はその句を含めて**構造化 index テーブルに落とす**橋渡し。書き込み先が重ならない(Cataloger=要約/提案、Indexer=index 行)。signal 駆動で「index が未/旧のエントリ」を対象に選ぶ。
 
+**逆引きの3面と Situation の供給役(2026-06-29 追記)**: Indexer は逆引きを**3つの面**で供給する ——(1) symptom/trigger 句索引、(2) UseCase ツリー(§23.15.4、問題の*種類*)、(3) **Situation**(`situations`/`situation_entries`、Phase 3 で器・API・UI・`/v1/lookup/by-situation` は実装済み)。Situation は UseCase と**別物**: UseCase が「このエントリは何の*種類*の問題か」(1 エントリ → 数カテゴリ)なのに対し、Situation は「どんな*シナリオ*に置かれた人がこのエントリ*束*を一緒に要るか」(シナリオ → N エントリ、type/project を跨ぐことが多い)。器は揃っていたが**供給役が未配線**で本番は 1 件のまま死蔵していた(症状/トリガ索引の死蔵と同型の問題)。よって Situation の authoring を Indexer に持たせる: use_case パスの後に、その回で扱ったエントリから「繰り返す具体シナリオ + それに 2 件以上のエントリが束で要る」ものを検出し、`POST /v1/situations` + `/{id}/entries` で作成/拡張する。loose bag・1 エントリ・UseCase の言い換えは DECLINE(UseCase と同じ規律)。これも sanctioned な Phase 5 直接書き(派生・再生成可能な逆引き面)。
+
 ### 23.16 個性継承と過去の参照(エージェント側責任)
 
 司書が過去の自分を覚える機構は **KB Core が提供しない**。
