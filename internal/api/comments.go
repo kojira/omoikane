@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -10,6 +11,22 @@ import (
 	"github.com/kojira/omoikane/internal/auth"
 	"github.com/kojira/omoikane/internal/store"
 )
+
+// reviewRequestHeader stamps X-Review-Requests: <n> on authenticated
+// responses when the caller has open @mention review requests, so an agent
+// learns it has reviews waiting on its very next call — no polling. Mirrors
+// the X-Skill-Version pull pattern. Degrades silently (count failure → no
+// header); it must never block the underlying request.
+func (h *Handler) reviewRequestHeader(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if tok := auth.FromContext(r.Context()); tok != nil && tok.UserID != "" {
+			if n, err := h.Store.CountReviewRequests(r.Context(), tok.UserID); err == nil && n > 0 {
+				w.Header().Set("X-Review-Requests", strconv.Itoa(n))
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
 
 // Entry comments — review / discussion threads anchored to one entry,
 // written by humans AND agents. See design.md §23.21.
@@ -19,8 +36,9 @@ import (
 // agent token has it); reading needs `read`.
 
 type createCommentReq struct {
-	Body    string `json:"body"`
-	ReplyTo string `json:"reply_to,omitempty"`
+	Body     string   `json:"body"`
+	ReplyTo  string   `json:"reply_to,omitempty"`
+	Mentions []string `json:"mentions,omitempty"` // user ids or librarian roles to notify
 }
 
 type updateCommentReq struct {
@@ -51,7 +69,7 @@ func (h *Handler) createEntryComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c, err := h.Store.CreateComment(httpCtx(r), entryID, tok.UserID,
-		req.Body, strings.TrimSpace(req.ReplyTo))
+		req.Body, strings.TrimSpace(req.ReplyTo), req.Mentions)
 	if err != nil {
 		if err == store.ErrNotFound {
 			writeError(w, http.StatusBadRequest, CodeBadRequest, "reply_to comment not found", nil)
@@ -147,4 +165,25 @@ func (h *Handler) deleteComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"id": cid, "deleted": true})
+}
+
+// GET /v1/me/review-requests — the open comments that @mention the caller
+// (by user id or librarian role) and that they didn't write. This is the
+// pull side of the X-Review-Requests header notification (§23.21).
+func (h *Handler) listMyReviewRequests(w http.ResponseWriter, r *http.Request) {
+	tok := auth.FromContext(r.Context())
+	if tok == nil || tok.UserID == "" {
+		writeError(w, http.StatusUnauthorized, CodeInvalidToken, "token required", nil)
+		return
+	}
+	reqs, err := h.Store.ListReviewRequests(httpCtx(r), tok.UserID, 50)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"review_requests": reqs,
+		"total":           len(reqs),
+		"how_to_resolve":  "reply with POST /v1/entries/{entry_id}/comments then PATCH /v1/comments/{id} {\"resolved\":true}",
+	})
 }

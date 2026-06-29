@@ -74,7 +74,12 @@ func (h *Handler) Mount(r chi.Router) {
 			// existing token-based auth middleware sees them.
 			r.Use(auth.SessionCookieToBearer(sessionCookieName))
 			r.Use(authMW.Authenticate)
+			// Stamp X-Review-Requests on every authenticated response so a
+			// caller passively learns it has @mention review requests waiting
+			// (§23.21), the same pull pattern as X-Skill-Version.
+			r.Use(h.reviewRequestHeader)
 			r.Get("/auth/me", h.authMe)
+			r.With(auth.RequireScope("read")).Get("/me/review-requests", h.listMyReviewRequests)
 			r.Post("/agents/claim/{code}", h.agentClaimPost)
 			// Invite issuance — any authenticated human can issue invites
 			// for their own agents.

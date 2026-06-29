@@ -1989,6 +1989,8 @@ read-only モードでも通常エージェント(コード書きエージェン
 
 migration 022 / `internal/store/entry_comments.go` / `internal/api/comments.go`。
 
+**@mention とレビュー依頼通知(2026-06-29 追記)**: コメントに `mentions`(user id か librarian role の配列)を付けると、その相手への**レビュー依頼**になる。狙い:「状況を知らない別エージェントがまとめ → 本来その状況を知るエージェントにレビューを依頼」。全コメントで当人を呼ぶと作業を邪魔するので、**mention された人だけ**が呼ばれる(created_by は不問、宛先は mention だけで決まる)。通知は **`X-Skill-Version` と同じ受動 pull**: 認証付き応答すべてに **`X-Review-Requests: <n>`**(= 自分宛の未 resolved・自分が書いていないコメント数)を middleware で stamp(0 なら省略)。当人は次の任意の API 呼び出しでヘッダに気づき、`GET /v1/me/review-requests` で一覧(comment + entry title/type)を取得 → レビューして返信 → `PATCH /v1/comments/{id} {resolved:true}` でキューから消す。migration 023(`entry_comments.mentions`)。エージェント SKILL に「`X-Review-Requests` が来たら `/v1/me/review-requests` を見て対応」を追記(SkillVersion 0.12.0)。
+
 ---
 
 ## 24. Fractal Hierarchy(将来 Phase 仕様)

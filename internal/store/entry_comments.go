@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -25,8 +26,11 @@ type EntryComment struct {
 	Body               string    `json:"body"`
 	ReplyTo            string    `json:"reply_to,omitempty"`
 	Resolved           bool      `json:"resolved"`
-	CreatedAt          time.Time `json:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at"`
+	// Mentions names who the comment is FOR (user ids or librarian roles,
+	// e.g. "detective"). Only mentioned users get a review request.
+	Mentions  []string  `json:"mentions,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 const commentSelect = `
@@ -35,24 +39,44 @@ const commentSelect = `
 	       CASE WHEN u.role = 'agent' THEN 'agent' ELSE 'human' END,
 	       COALESCE(u.librarian_role, ''),
 	       c.body, COALESCE(c.reply_to, ''), c.resolved,
+	       COALESCE(c.mentions, ''),
 	       c.created_at, c.updated_at
 	  FROM entry_comments c
 	  LEFT JOIN users u ON u.id = c.author_user_id`
 
 func scanComment(sc scanner) (*EntryComment, error) {
 	var c EntryComment
+	var mentions string
 	if err := sc.Scan(&c.ID, &c.EntryID, &c.AuthorUserID, &c.AuthorName,
 		&c.AuthorKind, &c.AuthorLibrarianRole, &c.Body, &c.ReplyTo,
-		&c.Resolved, &c.CreatedAt, &c.UpdatedAt); err != nil {
+		&c.Resolved, &mentions, &c.CreatedAt, &c.UpdatedAt); err != nil {
 		return nil, err
 	}
+	if mentions != "" {
+		_ = json.Unmarshal([]byte(mentions), &c.Mentions)
+	}
 	return &c, nil
+}
+
+// normalizeMentions trims, drops blanks, and de-dups mention tokens.
+func normalizeMentions(in []string) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, m := range in {
+		m = strings.TrimSpace(strings.TrimPrefix(m, "@"))
+		if m == "" || seen[m] {
+			continue
+		}
+		seen[m] = true
+		out = append(out, m)
+	}
+	return out
 }
 
 // CreateComment inserts a comment on entryID by authorUserID. replyTo, if
 // non-empty, must be an existing comment ON THE SAME ENTRY (one cannot
 // thread across entries). Returns the created comment with author joined.
-func (s *Store) CreateComment(ctx context.Context, entryID, authorUserID, body, replyTo string) (*EntryComment, error) {
+func (s *Store) CreateComment(ctx context.Context, entryID, authorUserID, body, replyTo string, mentions []string) (*EntryComment, error) {
 	body = strings.TrimSpace(body)
 	if body == "" {
 		return nil, errors.New("comment body required")
@@ -76,10 +100,15 @@ func (s *Store) CreateComment(ctx context.Context, entryID, authorUserID, body, 
 	if replyTo != "" {
 		replyArg = replyTo
 	}
+	var mentionsArg any
+	if m := normalizeMentions(mentions); len(m) > 0 {
+		b, _ := json.Marshal(m)
+		mentionsArg = string(b)
+	}
 	if _, err := s.db.ExecContext(ctx, `
-		INSERT INTO entry_comments(id, entry_id, author_user_id, body, reply_to)
-		VALUES (?, ?, ?, ?, ?)`,
-		id, entryID, authorUserID, body, replyArg); err != nil {
+		INSERT INTO entry_comments(id, entry_id, author_user_id, body, reply_to, mentions)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		id, entryID, authorUserID, body, replyArg, mentionsArg); err != nil {
 		return nil, err
 	}
 	return s.GetComment(ctx, id)
@@ -158,4 +187,75 @@ func (s *Store) DeleteComment(ctx context.Context, id string) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// reviewRequestWhere matches unresolved comments that @mention the user
+// (by id or by their librarian role) and were written by someone else.
+// The two bound params are both userID; the role is resolved inline.
+const reviewRequestWhere = `
+	c.resolved = 0
+	AND c.author_user_id != ?
+	AND c.mentions IS NOT NULL
+	AND EXISTS (
+		SELECT 1 FROM json_each(c.mentions) je
+		WHERE je.value = ?
+		   OR je.value = (SELECT librarian_role FROM users WHERE id = ?)
+	)`
+
+// CountReviewRequests returns how many open review requests mention userID.
+// Cheap enough to call per-request from the response-header middleware.
+func (s *Store) CountReviewRequests(ctx context.Context, userID string) (int, error) {
+	if userID == "" {
+		return 0, nil
+	}
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM entry_comments c WHERE `+reviewRequestWhere,
+		userID, userID, userID).Scan(&n)
+	return n, err
+}
+
+// ReviewRequest is one open comment addressed to the caller, with the
+// minimal entry context needed to act on it.
+type ReviewRequest struct {
+	Comment    *EntryComment `json:"comment"`
+	EntryTitle string        `json:"entry_title"`
+	EntryType  string        `json:"entry_type"`
+}
+
+// ListReviewRequests returns the open review requests mentioning userID,
+// oldest first (FIFO — address the longest-waiting first).
+func (s *Store) ListReviewRequests(ctx context.Context, userID string, limit int) ([]*ReviewRequest, error) {
+	if userID == "" {
+		return nil, nil
+	}
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	rows, err := s.db.QueryContext(ctx, commentSelect+`
+		WHERE `+reviewRequestWhere+`
+		ORDER BY c.created_at ASC
+		LIMIT ?`, userID, userID, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*ReviewRequest
+	for rows.Next() {
+		c, err := scanComment(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, &ReviewRequest{Comment: c})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// Attach entry title/type per request (small N, one cheap query each).
+	for _, rr := range out {
+		_ = s.db.QueryRowContext(ctx,
+			`SELECT title, type FROM entries WHERE id = ?`, rr.Comment.EntryID).
+			Scan(&rr.EntryTitle, &rr.EntryType)
+	}
+	return out, nil
 }

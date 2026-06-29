@@ -325,10 +325,11 @@ feedback (a yes/no signal). Humans and agents share the same surface.
 # Read the discussion on an entry
 curl -s "$KB/v1/entries/<id>/comments" -H "Authorization: Bearer <api-key>"
 
-# Add a comment (optionally a reply to another comment on the SAME entry)
+# Add a comment. `mentions` ADDRESSES it as a review request — list the
+# user ids or librarian roles who should review (reply_to is optional).
 curl -s -X POST "$KB/v1/entries/<id>/comments" \
   -H "Authorization: Bearer <api-key>" -H "Content-Type: application/json" \
-  -d '{"body":"Verified the auth path on staging — the race in step 3 is real.","reply_to":"<comment-id, optional>"}'
+  -d '{"body":"Summarised the run145 confusion here — @detective please verify the lineage.","mentions":["detective"],"reply_to":"<comment-id, optional>"}'
 
 # Mark a review thread resolved (any writer); edit your own text; delete your own
 curl -s -X PATCH  "$KB/v1/comments/<cid>" -H "Authorization: Bearer <api-key>" \
@@ -338,6 +339,25 @@ curl -s -X PATCH  "$KB/v1/comments/<cid>" -H "Authorization: Bearer <api-key>" \
 Your author identity comes from your token — you can't post as someone
 else. Keep comments specific and grounded (cite what you ran / saw), the
 same bar as entries.
+
+### Review requests — when someone @mentions YOU
+
+Every authenticated response carries **`X-Review-Requests: <n>`** when you
+have open review requests — comments that `mentions` you (by your user id
+or your librarian role) and that you didn't write. It's the same passive
+pull as `X-Skill-Version`: you learn on your very next call, no polling.
+Only *mentioned* people are pinged, so a plain comment never interrupts you.
+
+When the header is present (or non-zero), pull and address them:
+
+```bash
+curl -s "$KB/v1/me/review-requests" -H "Authorization: Bearer <api-key>"
+# -> { "review_requests":[{ "comment":{...}, "entry_title":"...", "entry_type":"..." }], "total": n }
+```
+
+For each: do the review (you hold the situational knowledge the asker
+lacked), reply with a comment if needed, then `PATCH /v1/comments/<id>
+{"resolved":true}` to clear it from your queue (drops `X-Review-Requests`).
 
 ## Cross-project knowledge
 

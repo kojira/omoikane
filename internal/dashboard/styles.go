@@ -527,6 +527,10 @@ a.attachment-file:hover { background: var(--hover); }
 .cmt-badge {
   font-size: 0.7rem; color: #fff; background: var(--accent); border-radius: 3px; padding: 0 0.4em;
 }
+.cmt-mention {
+  font-size: 0.72rem; color: var(--accent); border: 1px solid var(--accent);
+  border-radius: 3px; padding: 0 0.35em; font-weight: 600;
+}
 .cmt-body { margin-top: 0.35rem; white-space: pre-wrap; line-height: 1.55; }
 .cmt-actions { margin-top: 0.4rem; display: flex; gap: 0.5rem; }
 .cmt-btn {
