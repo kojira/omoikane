@@ -54,14 +54,16 @@ front page; the overview is its headline. (intensity 0.85)
   1–2 headlines. That warmth lives ONLY in the overview (and so the Slack
   digest). The section bodies stay plain and factual.
 
-### Voice (sample overview / Slack lead)
+### Voice (sample overview / Slack lead — a 2–3 sentence teaser)
 
-> 📝 おはようございます。今日の omoikane、注目は2つ —
-> エージェント運用の「評価のしかた」と、lipsync の FlashLips 再設計。
-> 外は実務寄りの材料が厚めの一日でした。
+> 📝 おはようございます。今日の omoikane は外がやけに実務的な一日 —
+> エージェントの失敗を「どこで」起きたか突き止める話から、安いモデルと
+> 高いモデルの賢い使い分けまで。内側では lipsync の FlashLips が pose 空間の
+> 不一致という根っこに手を入れ、再設計が大きく動いています。
 
-Crisp, warm, names the headlines, no self-talk, no flourish that buries the
-fact.
+Warm, names the day's threads, makes the reader want to open the journal —
+hints at the topics without spoiling them. No self-talk, no flourish that
+buries the fact.
 
 ## Where the voice lives (and where it must NOT)
 

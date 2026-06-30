@@ -106,7 +106,7 @@ Write for a human skimming over coffee: themed, concise, linked, with
 a one-line "why it matters" where it earns it. Exclude prior daily
 journals from the input (don't summarise your own journals).
 
-The opening 1–2 sentence **overview** (and so the Slack digest, which
+The opening 2–3 sentence TEASER **overview** (and so the Slack digest, which
 reuses it) is about what the day MEANT for a reader — the external signal
 and internal knowledge that matters. Never put the librarians' OWN workload
 or spare capacity there: phrases like "整理余力は十分", "ツリーは静か",

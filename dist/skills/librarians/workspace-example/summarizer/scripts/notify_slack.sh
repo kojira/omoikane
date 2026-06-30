@@ -70,11 +70,29 @@ lead = to_mrkdwn(lead)
 if len(lead) > 1400:
     lead = lead[:1400].rsplit("。", 1)[0] + "。…"
 
+# Highlights — the actual topics of the day, to make a reader want to click.
+def section(name):
+    m = re.search(r"\n##\s*" + re.escape(name) + r"\b(.*?)(?=\n##\s|\Z)", body, re.S)
+    return m.group(1) if m else ""
+
+ext_heads = re.findall(r"^\s*[-*]\s*\*\*(.+?)\*\*", section("外部の注目"), re.M)[:3]
+projects = [p.strip() for p in re.findall(r"^###\s*(.+)$", section("内部の新知見"), re.M)]
+bullets = ["• " + to_mrkdwn(h) for h in ext_heads]
+if projects:
+    bullets.append("• 内部: " + " / ".join(projects[:3]) + " が前進")
+
 url = f"{kb}/entries/{j['id']}"
-text = (f"📝 *omoikane 日次ジャーナル {target}*\n\n"
-        f"{lead}\n\n"
-        f"📖 詳細 → <{url}|ジャーナル全文を読む>")
-print(json.dumps({"text": text, "unfurl_links": False}, ensure_ascii=False))
+parts = [f"📝 *omoikane 日次ジャーナル {target}*", "", lead]
+if bullets:
+    parts += ["", "*今日のハイライト*", "\n".join(bullets)]
+parts += ["", f"📖 続きは暦のジャーナルで → <{url}|全文を読む>"]
+text = "\n".join(parts)
+print(json.dumps({
+    "text": text,
+    "username": "暦",
+    "icon_emoji": ":sunrise_over_mountains:",
+    "unfurl_links": False,
+}, ensure_ascii=False))
 PY
 )
 
